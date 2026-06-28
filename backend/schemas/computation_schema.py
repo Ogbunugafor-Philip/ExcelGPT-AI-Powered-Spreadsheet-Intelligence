@@ -80,3 +80,6 @@ class ComputationOutput(BaseModel):
     analysis_sheet: AnalysisSheet = Field(default_factory=AnalysisSheet)
     charts: list[Chart] = Field(default_factory=list)
     forecast_sheet: ForecastSheet = Field(default_factory=ForecastSheet)
+    # Raw column name -> presentation-ready display name, so every consumer
+    # (Excel writer, in-app dashboard) can relabel columns consistently.
+    display_names: dict[str, str] = Field(default_factory=dict)

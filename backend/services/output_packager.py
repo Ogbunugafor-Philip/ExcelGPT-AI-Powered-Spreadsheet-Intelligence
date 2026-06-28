@@ -34,6 +34,7 @@ from .modules.common import (
     is_currency_column,
     to_jsonable,
 )
+from .semantics import suggest_display_name
 
 AGG_TYPES = {"group_sum", "group_avg", "rank", "filter"}
 
@@ -62,6 +63,7 @@ class OutputPackager:
         analysis_sheet = self._analysis_sheet(results)
         charts = self._charts(results)
         forecast_sheet = self._forecast_sheet(by_type.get("forecast", []))
+        display_names = self._display_names(session, results, sheets, data_sheet)
 
         return ComputationOutput(
             session_id=session_id,
@@ -71,7 +73,38 @@ class OutputPackager:
             analysis_sheet=analysis_sheet,
             charts=charts,
             forecast_sheet=forecast_sheet,
+            display_names=display_names,
         )
+
+    # -- display names ------------------------------------------------------
+
+    def _display_names(self, session, results, sheets, data_sheet) -> dict[str, str]:
+        """Raw column name -> display name, spanning source columns and computed ones.
+
+        Seeds from the intelligence brief (which already profiled every source
+        column) and then fills in any computed/derived columns that only appear
+        in operation results (Rank, growth_pct, period, …).
+        """
+        mapping: dict[str, str] = {}
+        brief = session.get("intelligence_brief", {}) or {}
+        for raw, display in (brief.get("display_names") or {}).items():
+            if raw:
+                mapping[str(raw)] = display or suggest_display_name(raw)
+
+        def add(name: Any) -> None:
+            key = str(name)
+            if key and key not in mapping:
+                mapping[key] = suggest_display_name(key)
+
+        for result in results:
+            for column in result.get("columns", []) or []:
+                add(column)
+        for column in data_sheet.columns or []:
+            add(column if not isinstance(column, dict) else column.get("name", ""))
+        for df in (sheets or {}).values():
+            for column in df.columns:
+                add(column)
+        return mapping
 
     # -- executive summary --------------------------------------------------
 
@@ -317,4 +350,4 @@ class OutputPackager:
 
     @staticmethod
     def _pretty(name: Any) -> str:
-        return str(name).replace("_", " ").strip().title()
+        return suggest_display_name(name) or str(name).replace("_", " ").strip().title()

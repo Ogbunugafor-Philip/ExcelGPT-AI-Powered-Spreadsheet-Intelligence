@@ -43,6 +43,8 @@ class ChartPreview(BaseModel):
     chart_type: Literal["bar", "line", "pie", "scatter"]
     title: str
     recharts_data: list[Any] = Field(default_factory=list)
+    x_label: str = ""
+    y_label: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -88,12 +90,25 @@ class MetricPreview(BaseModel):
     formula_used: str = ""
 
 
+class TableMeta(BaseModel):
+    """Display-name column headers for a rich dashboard table."""
+
+    entity_label: str = ""
+    value_label: str = ""
+    previous_label: str = ""
+    current_label: str = ""
+    change_label: str = ""
+
+
 class RankingPreview(BaseModel):
     rank: Optional[int] = None
     label: str = ""
     value: str = ""
     change: str = ""
     direction: Literal["up", "down", "neutral"] = "neutral"
+    # Performance tier vs. the mean: excellent | good | average | below.
+    tier: Literal["excellent", "good", "average", "below", "none"] = "none"
+    numeric_value: Optional[float] = None
 
 
 class GrowthRowPreview(BaseModel):
@@ -102,6 +117,9 @@ class GrowthRowPreview(BaseModel):
     previous: str = ""
     growth_rate: str = ""
     direction: Literal["up", "down", "neutral"] = "neutral"
+    numeric_current: Optional[float] = None
+    numeric_previous: Optional[float] = None
+    numeric_change_pct: Optional[float] = None
 
 
 class ForecastPointPreview(BaseModel):
@@ -127,6 +145,10 @@ class ReportPreview(BaseModel):
     metrics: list[MetricPreview] = Field(default_factory=list)
     rankings: list[RankingPreview] = Field(default_factory=list)
     growth_table: list[GrowthRowPreview] = Field(default_factory=list)
+    rankings_meta: TableMeta = Field(default_factory=TableMeta)
+    growth_meta: TableMeta = Field(default_factory=TableMeta)
+    # Raw column name -> display name, so the dashboard relabels every column.
+    display_names: dict[str, str] = Field(default_factory=dict)
     # Retained for backward compatibility with earlier consumers.
     kpi_cards: list[KpiCardPreview] = Field(default_factory=list)
 

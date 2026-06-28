@@ -44,6 +44,7 @@ from schemas.api_schema import (
     RefineResponse,
     ReportPreview,
     ReportSheetPreview,
+    TableMeta,
     UploadPreview,
     UploadResponse,
 )
@@ -55,6 +56,7 @@ from services.excel_reader import ExcelReader
 from services.file_validator import FileValidator
 from services.intent_engine import IntentEngine, IntentEngineError
 from services.modules.common import format_naira, format_pct, is_currency_column
+from services.semantics import suggest_display_name
 from services.session_manager import SessionManager
 from services.sheets.styles import column_name, detect_type
 
@@ -228,13 +230,26 @@ def _build_preview(output: ComputationOutput) -> ReportPreview:
         kpi_cards=kpi_cards,
     )
 
+    display_names = dict(output.display_names or {})
+
+    def display(name) -> str:
+        key = str(name)
+        return display_names.get(key) or suggest_display_name(key) or key
+
     sheets: list[ReportSheetPreview] = []
-    data_sheet = _data_sheet_preview(output)
+    data_sheet = _data_sheet_preview(output, display)
     if data_sheet is not None:
         sheets.append(data_sheet)
 
     charts = [
-        ChartPreview(chart_id=c.chart_id, chart_type=c.chart_type, title=c.title, recharts_data=c.recharts_data)
+        ChartPreview(
+            chart_id=c.chart_id,
+            chart_type=c.chart_type,
+            title=c.title,
+            recharts_data=c.recharts_data,
+            x_label=_chart_axis(c.recharts_data, "categoryName"),
+            y_label=_chart_axis(c.recharts_data, "displayName"),
+        )
         for c in output.charts
     ]
 
@@ -242,8 +257,8 @@ def _build_preview(output: ComputationOutput) -> ReportPreview:
         MetricPreview(label=m.label, value=m.value, formula_used=m.formula_used)
         for m in output.analysis_sheet.metrics
     ]
-    rankings = _rankings_preview(output.analysis_sheet.rankings)
-    growth_table = _growth_preview(output.analysis_sheet.growth_table)
+    rankings, rankings_meta = _rankings_preview(output.analysis_sheet.rankings, display)
+    growth_table, growth_meta = _growth_preview(output.analysis_sheet.growth_table, display)
     forecast = _forecast_preview(output)
 
     return ReportPreview(
@@ -254,8 +269,18 @@ def _build_preview(output: ComputationOutput) -> ReportPreview:
         metrics=metrics,
         rankings=rankings,
         growth_table=growth_table,
+        rankings_meta=rankings_meta,
+        growth_meta=growth_meta,
+        display_names=display_names,
         kpi_cards=kpi_cards,
     )
+
+
+def _chart_axis(recharts_data, key: str) -> str:
+    for point in recharts_data or []:
+        if isinstance(point, dict) and point.get(key):
+            return str(point[key])
+    return ""
 
 
 def _as_row(row) -> list:
@@ -266,7 +291,7 @@ def _as_row(row) -> list:
     return [row]
 
 
-def _data_sheet_preview(output: ComputationOutput) -> ReportSheetPreview | None:
+def _data_sheet_preview(output: ComputationOutput, display) -> ReportSheetPreview | None:
     data_sheet = output.data_sheet
     if not data_sheet.columns:
         return None
@@ -274,12 +299,14 @@ def _data_sheet_preview(output: ComputationOutput) -> ReportSheetPreview | None:
     rows = [_as_row(r) for r in data_sheet.rows[:_PREVIEW_ROW_LIMIT]]
     columns = []
     for idx, raw_col in enumerate(data_sheet.columns):
-        name = column_name(raw_col)
+        raw_name = column_name(raw_col)
+        name = display(raw_name)
         sample = [row[idx] for row in rows if idx < len(row)]
-        columns.append(PreviewColumn(name=name, type=detect_type(name, sample)))
+        # Type detection keyed on the RAW name (its keyword hints drive currency/%).
+        columns.append(PreviewColumn(name=name, type=detect_type(raw_name, sample)))
 
     formatting = [
-        ConditionalFormatPreview(column=column_name(rule.column), rule=rule.rule, color=rule.color)
+        ConditionalFormatPreview(column=display(column_name(rule.column)), rule=rule.rule, color=rule.color)
         for rule in data_sheet.conditional_formatting
     ]
     return ReportSheetPreview(
@@ -312,16 +339,14 @@ def _format_value(name: str, value) -> str:
     return str(value)
 
 
-def _rankings_preview(rankings: list) -> list[RankingPreview]:
-    out: list[RankingPreview] = []
-    for row in rankings:
+def _ranking_keys(rows: list) -> tuple[str | None, str | None, str | None]:
+    """Identify the entity, primary-value, and change columns from ranking rows."""
+    for row in rows:
         if not isinstance(row, dict):
             continue
-        rank = row.get("Rank", row.get("rank"))
-
-        label = next(
-            (str(v) for k, v in row.items() if k not in ("Rank", "rank") and isinstance(v, str)),
-            "",
+        entity_key = next(
+            (k for k, v in row.items() if k not in ("Rank", "rank") and isinstance(v, str)),
+            None,
         )
         change_key = next((k for k in row if k not in ("Rank", "rank") and _looks_pct(k)), None)
         value_key = next(
@@ -333,8 +358,46 @@ def _rankings_preview(rankings: list) -> list[RankingPreview]:
                 (k for k, v in row.items() if k not in ("Rank", "rank") and k != change_key and _is_number(v)),
                 None,
             )
+        return entity_key, value_key, change_key
+    return None, None, None
 
-        value = _format_value(value_key, row.get(value_key)) if value_key else ""
+
+def _tier_of(value, mean) -> str:
+    """Performance tier vs the mean: excellent | good | average | below."""
+    if not _is_number(value) or not _is_number(mean) or mean == 0:
+        return "none"
+    ratio = value / mean
+    if ratio >= 1.25:
+        return "excellent"
+    if ratio >= 1.0:
+        return "good"
+    if ratio >= 0.75:
+        return "average"
+    return "below"
+
+
+def _rankings_preview(rankings: list, display) -> tuple[list[RankingPreview], TableMeta]:
+    entity_key, value_key, change_key = _ranking_keys(rankings)
+    numeric_values = [
+        row.get(value_key) for row in rankings
+        if isinstance(row, dict) and value_key and _is_number(row.get(value_key))
+    ]
+    mean = sum(numeric_values) / len(numeric_values) if numeric_values else None
+
+    meta = TableMeta(
+        entity_label=display(entity_key) if entity_key else "Entity",
+        value_label=display(value_key) if value_key else "Value",
+        change_label=display(change_key) if change_key else "",
+    )
+
+    out: list[RankingPreview] = []
+    for row in rankings:
+        if not isinstance(row, dict):
+            continue
+        rank = row.get("Rank", row.get("rank"))
+        label = str(row.get(entity_key)) if entity_key and row.get(entity_key) is not None else ""
+        raw_value = row.get(value_key) if value_key else None
+        value = _format_value(value_key, raw_value) if value_key else ""
         change = _format_value(change_key, row.get(change_key)) if change_key else ""
         direction = row.get("direction") if row.get("direction") in ("up", "down", "neutral") else _direction_of(row.get(change_key))
 
@@ -344,12 +407,17 @@ def _rankings_preview(rankings: list) -> list[RankingPreview]:
             value=value,
             change=change,
             direction=direction,
+            tier=_tier_of(raw_value, mean),
+            numeric_value=float(raw_value) if _is_number(raw_value) else None,
         ))
-    return out
+    return out, meta
 
 
-def _growth_preview(growth_table: list) -> list[GrowthRowPreview]:
+def _growth_preview(growth_table: list, display) -> tuple[list[GrowthRowPreview], TableMeta]:
     out: list[GrowthRowPreview] = []
+    entity_label = "Entity"
+    current_label = "Current"
+    previous_label = "Previous"
     for row in growth_table:
         if not isinstance(row, dict):
             continue
@@ -371,18 +439,22 @@ def _growth_preview(growth_table: list) -> list[GrowthRowPreview]:
         current_name = ""
         if actual_key and target_key:
             current_name, current_val, previous_val = actual_key, row.get(actual_key), row.get(target_key)
+            current_label, previous_label = display(actual_key), display(target_key)
         elif len(numeric_keys) >= 2:
             current_name, current_val, previous_val = numeric_keys[-1], row.get(numeric_keys[-1]), row.get(numeric_keys[0])
+            current_label, previous_label = display(numeric_keys[-1]), display(numeric_keys[0])
         elif numeric_keys:
             current_name = numeric_keys[0]
             current_val = row.get(current_name)
+            current_label = display(current_name)
             if _is_number(rate_value) and rate_value != -100:
                 previous_val = current_val / (1 + rate_value / 100.0)
 
         label_parts = []
-        entity = next((str(v) for k, v in row.items() if isinstance(v, str) and k not in ("direction", "status", "period")), None)
-        if entity:
-            label_parts.append(entity)
+        entity_key = next((k for k, v in row.items() if isinstance(v, str) and k not in ("direction", "status", "period")), None)
+        if entity_key and row.get(entity_key):
+            label_parts.append(str(row[entity_key]))
+            entity_label = display(entity_key)
         if row.get("period") is not None:
             label_parts.append(str(row["period"]))
         label = " · ".join(label_parts) or "—"
@@ -393,8 +465,17 @@ def _growth_preview(growth_table: list) -> list[GrowthRowPreview]:
             previous=_format_value(current_name, previous_val),
             growth_rate=growth_rate,
             direction=direction,
+            numeric_current=float(current_val) if _is_number(current_val) else None,
+            numeric_previous=float(previous_val) if _is_number(previous_val) else None,
+            numeric_change_pct=float(rate_value) if _is_number(rate_value) else None,
         ))
-    return out
+    meta = TableMeta(
+        entity_label=entity_label,
+        current_label=current_label,
+        previous_label=previous_label,
+        change_label="Change",
+    )
+    return out, meta
 
 
 def _direction_of(value) -> str:

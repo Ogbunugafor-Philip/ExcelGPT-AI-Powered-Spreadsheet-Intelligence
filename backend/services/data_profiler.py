@@ -5,9 +5,26 @@ from typing import Any
 
 import pandas as pd
 
+from .semantics import semantic_label as _semantic_label
+from .semantics import suggest_display_name as _suggest_display_name
+
 
 class DataProfiler:
     """Profile workbook sheets and build an intelligence brief for the frontend and Cerebras."""
+
+    # -- column intelligence -----------------------------------------------
+
+    def semantic_label(self, column_name: str, series: pd.Series, inferred_type: str) -> str:
+        """Human-readable semantic *role* for a column (e.g. 'revenue_metric').
+
+        Delegates to ``services.semantics`` so the profiler, intent engine,
+        computation modules and packager all reason about columns identically.
+        """
+        return _semantic_label(column_name, series, inferred_type)
+
+    def suggest_display_name(self, column_name: str) -> str:
+        """Presentation-ready label for a column ('deposits_ngn' -> 'Deposits (₦)')."""
+        return _suggest_display_name(column_name)
 
     def profile(self, df: pd.DataFrame, sheet_name: str) -> dict[str, Any]:
         normalized_df = df.copy()
@@ -32,6 +49,8 @@ class DataProfiler:
             infer_type = self._infer_type(series, column)
             profile = {
                 "name": column,
+                "display_name": self.suggest_display_name(column),
+                "semantic": self.semantic_label(column, series, infer_type),
                 "null_count": null_count,
                 "null_percentage": null_percentage,
                 "unique_count": unique_count,
@@ -63,12 +82,17 @@ class DataProfiler:
         join_counts: dict[str, int] = {}
         flags: set[str] = set()
 
+        display_names: dict[str, str] = {}
         for sheet_name, profile in all_sheet_profiles.items():
             column_summary = []
             for column_name, column_profile in profile.get("columns", {}).items():
+                display_name = column_profile.get("display_name") or self.suggest_display_name(column_name)
+                display_names.setdefault(column_name, display_name)
                 column_summary.append(
                     {
                         "name": column_name,
+                        "display_name": display_name,
+                        "semantic": column_profile.get("semantic", "unknown"),
                         "type": column_profile.get("inferred_type", "text"),
                         "null_pct": column_profile.get("null_percentage", 0.0),
                         "unique_ratio": column_profile.get("unique_ratio", 0.0),
@@ -98,6 +122,7 @@ class DataProfiler:
             "total_sheets": len(sheets),
             "total_rows": total_rows,
             "sheets": sheets,
+            "display_names": display_names,
             "potential_join_keys": potential_join_keys,
             "nigerian_context": {
                 "detected": detected,
