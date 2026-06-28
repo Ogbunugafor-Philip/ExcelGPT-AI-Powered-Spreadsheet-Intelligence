@@ -79,14 +79,11 @@ class ExcelReader:
         return "text"
 
     def handle_large_file(self, file_path: str, sheet_name: str) -> pd.DataFrame:
-        engine = self._get_engine(file_path)
-        chunks = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine, chunksize=5000, header=None)
-        frames: list[pd.DataFrame] = []
-        for chunk in chunks:
-            frames.append(self._prepare_dataframe(chunk))
-        if not frames:
-            return pd.DataFrame()
-        return pd.concat(frames, ignore_index=True)
+        # NOTE: pandas/openpyxl cannot stream .xlsx — read_excel has no chunksize
+        # (that's read_csv only). So we read the sheet in a single pass; large-file
+        # safety comes from downstream caps (preview rows, aggregation, virtualised
+        # tables) rather than row chunking here.
+        return self._read_sheet_dataframe(file_path, sheet_name)
 
     def _read_sheet_dataframe(self, file_path: str, sheet_name: str) -> pd.DataFrame:
         engine = self._get_engine(file_path)

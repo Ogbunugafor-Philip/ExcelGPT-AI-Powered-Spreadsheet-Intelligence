@@ -8,15 +8,24 @@ an intelligence brief for the frontend.
 from __future__ import annotations
 
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 import config
+from logger import (
+    log_analysis,
+    log_download,
+    log_error,
+    log_refinement,
+    log_request,
+    log_upload,
+)
 from schemas.api_schema import (
     AnalyseRequest,
     AnalyseResponse,
@@ -63,6 +72,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    """Time every request, expose X-Process-Time, and log method/path/status."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    response.headers["X-Process-Time"] = f"{duration_ms:.1f}"
+    log_request(request.method, request.url.path, response.status_code, duration_ms)
+    return response
+
 validator = FileValidator()
 reader = ExcelReader()
 profiler = DataProfiler()
@@ -107,6 +127,15 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
         session_id=session_id,
     )
 
+    sheets = preview_payload.get("sheets", [])
+    log_upload(
+        filename=filename,
+        size_mb=upload_path.stat().st_size / (1024 * 1024),
+        sheet_count=len(sheets),
+        row_count=sum(s.get("row_count", 0) for s in sheets),
+        session_id=session_id,
+    )
+
     return UploadResponse(
         session_id=session_id,
         preview=UploadPreview(**preview_payload),
@@ -125,14 +154,18 @@ async def analyse(payload: AnalyseRequest) -> AnalyseResponse:
     """
     session = session_manager.get_session(payload.session_id)
     intelligence_brief = session.get("intelligence_brief", {})
+    started = time.perf_counter()
 
     try:
         action_plan = intent_engine.classify(intelligence_brief, payload.instruction)
     except IntentEngineError as exc:
+        log_error("/analyse", "IntentEngineError", str(exc), payload.session_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     # Ambiguous instruction: surface the question, do not compute.
     if action_plan.clarification_needed:
+        log_analysis(payload.session_id, payload.instruction, action_plan.intent_type,
+                     (time.perf_counter() - started) * 1000, status="clarification")
         return AnalyseResponse(
             action_plan=action_plan,
             preview=ReportPreview(),
@@ -142,6 +175,8 @@ async def analyse(payload: AnalyseRequest) -> AnalyseResponse:
 
     version = int(session.get("version", 0)) + 1
     computation_output, download_token = _compute_version(session, action_plan, version, payload.instruction)
+    log_analysis(payload.session_id, payload.instruction, action_plan.intent_type,
+                 (time.perf_counter() - started) * 1000)
 
     return AnalyseResponse(
         action_plan=action_plan,
@@ -406,12 +441,14 @@ async def refine(payload: RefineRequest) -> RefineResponse:
     """
     session = session_manager.get_session(payload.session_id)  # 404 if unknown/expired
     intelligence_brief = session.get("intelligence_brief", {})
+    started = time.perf_counter()
 
     refinement_context = _build_refinement_context(payload.history, payload.feedback)
 
     try:
         action_plan = intent_engine.classify(intelligence_brief, refinement_context)
     except IntentEngineError as exc:
+        log_error("/refine", "IntentEngineError", str(exc), payload.session_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     # Ambiguous refinement: surface the question, keep the current version intact.
@@ -425,6 +462,7 @@ async def refine(payload: RefineRequest) -> RefineResponse:
 
     version = int(session.get("version", payload.current_version)) + 1
     computation_output, download_token = _compute_version(session, action_plan, version, payload.feedback)
+    log_refinement(payload.session_id, payload.feedback, version, (time.perf_counter() - started) * 1000)
 
     return RefineResponse(
         action_plan=action_plan,
@@ -463,7 +501,13 @@ async def download(token: str) -> FileResponse:
         computation_output = ComputationOutput.model_validate(output_data)
         file_path = excel_builder.build(computation_output, session_id)
     except Exception as exc:  # noqa: BLE001 — surface build failures as 500
+        log_error("/download", "ExcelBuildError", str(exc), session_id)
         raise HTTPException(status_code=500, detail=f"Failed to build the Excel report: {exc}") from exc
+
+    try:
+        log_download(session_id, computation_output.version, Path(file_path).stat().st_size / 1024)
+    except Exception:  # noqa: BLE001 — logging must not break the download
+        pass
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return FileResponse(

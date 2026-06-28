@@ -1,134 +1,192 @@
-# ExcelGPT
+# ExcelGPT — AI-Powered Spreadsheet Intelligence
 
-**AI-powered Excel transformation and report generation — built for the Nigerian market.**
+> *"Copilot makes Excel smarter. ExcelGPT makes Excel Nigerian."*
 
-ExcelGPT turns raw Excel spreadsheets and a plain-English instruction into a polished, multi-sheet Excel report: executive summaries, KPI dashboards, analysis tables, charts, and forecasts. It is purpose-built for Nigerian business contexts — banking (CBN returns, branch performance), sales (FSO/DSA hierarchies, territory analysis), HR & payroll (PENCOM, NHF, PAYE), executive board packs, and LGA/territory intelligence — with NGN currency formatting and Nigerian fiscal-calendar awareness throughout.
-
-> **Phase 1 status:** This repository is the *blueprint*. It contains the full architecture, API contracts, JSON schemas, Pydantic models, and skeleton application shells. **No business logic is implemented yet** — every endpoint and component is a documented placeholder.
-
----
-
-## Architecture at a glance
-
-ExcelGPT separates **intent** from **computation**. The Cerebras LLM is used *only* to translate a user's instruction (plus a data "intelligence brief") into a structured **action plan** — it never sees raw data values and never performs math. All numerical work happens deterministically in a Python computation engine (pandas, numpy, scipy, statsmodels, scikit-learn). This keeps results auditable, reproducible, and trustworthy for finance-grade reporting.
-
-```
-React + Tailwind (Vercel)
-        │  SheetJS reads client-side, Axios calls API
-        ▼
-FastAPI + Uvicorn (Contabo VPS, behind Nginx)
-        │
-        ├─ Data Intelligence Layer   → pandas profiling → intelligence brief JSON
-        ├─ AI Intent Layer           → Cerebras API → action plan JSON (intent only)
-        ├─ Computation Layer         → pandas/numpy/scipy/statsmodels/sklearn → computation output JSON
-        └─ Excel Generation Layer    → openpyxl → multi-sheet .xlsx
-```
-
-See [architecture/system-architecture.md](architecture/system-architecture.md) for the full description and [architecture/data-flow.md](architecture/data-flow.md) for the end-to-end request lifecycle.
+[![Live Demo](https://img.shields.io/badge/Live-excelgpt.store-2563EB?style=for-the-badge)](https://excelgpt.store)
+[![Backend](https://img.shields.io/badge/FastAPI-Backend-10B981?style=for-the-badge)](https://excelgpt.store/api/health)
+[![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python)](https://python.org)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)](https://react.dev)
 
 ---
 
-## Tech stack
+## What is ExcelGPT?
 
-### Frontend
-- **React 18** + **Vite** — SPA shell
-- **Tailwind CSS** + `@tailwindcss/forms` — design system (navy / electric-blue theme)
-- **SheetJS (xlsx)** — client-side Excel reading and preview
-- **Recharts** — KPI charts in the preview panel
-- **Axios** — API client
-- **react-dropzone** — upload zone
-- **framer-motion** — transitions
-- **lucide-react** — icons
-- Hosted on **Vercel**
+ExcelGPT is a conversational AI system that transforms any Excel file into a professionally formatted, mathematically computed business report — in seconds.
 
-### Backend
-- **FastAPI** + **Uvicorn** — REST API
-- **python-multipart** — file uploads
-- **pandas / numpy** — data handling and intelligence brief
-- **scipy / statsmodels / scikit-learn** — statistics, forecasting, scoring, clustering
-- **matplotlib / seaborn** — chart image rendering for Excel embedding
-- **openpyxl** — multi-sheet Excel generation
-- **cerebras-cloud-sdk** — AI intent layer
-- **pydantic** — schema validation
-- **python-dotenv** — configuration
-- Hosted on a **Contabo VPS** behind **Nginx**
+Built specifically for the Nigerian market, ExcelGPT understands Nigerian banking workflows, HR and payroll structures (PENCOM, NHF, PAYE), LGA-level territory analysis, FSO and DSA sales hierarchies, and Naira currency formatting conventions.
+
+**Upload. Describe. Download.**
 
 ---
 
-## Repository layout
+## The Problem
 
-```
-excelgpt/
-├── README.md
-├── .env.example
-├── architecture/            # The blueprint: design docs, contracts, schemas
-├── frontend/                # React shell (no logic yet)
-└── backend/                 # FastAPI shell (endpoints defined, not implemented)
-```
+Microsoft Excel is the most widely used business tool across Nigerian banks, SMEs, government institutions, and sales organisations. Yet most users operate at a fraction of its true capability.
+
+- Raw data sits in spreadsheets for weeks without meaningful analysis
+- Reports are built manually, consuming hours of productive time
+- Formatting is inconsistent and unprofessional
+- Statistical insights that could drive better decisions are never extracted
+- Hiring a professional Excel consultant is expensive and inaccessible
 
 ---
 
-## Getting started
+## How ExcelGPT is Different
 
-### Prerequisites
-- Node.js ≥ 18 and npm
-- Python ≥ 3.10 and pip
-- A Cerebras API key (https://cloud.cerebras.ai)
+| Area | Microsoft Copilot | ExcelGPT |
+|------|------------------|----------|
+| Nigerian business context | None | Designed around Nigerian business needs |
+| CBN regulatory formats | Not available | Supports Nigerian banking reporting workflows |
+| Nigerian HR rules (PENCOM, NHF) | Not available | Built-in Nigerian payroll templates |
+| LGA and ward level intelligence | Not available | Nigerian geographic structures supported |
+| Naira formatting | Not available | Built-in Naira currency formatting |
+| Requires Microsoft 365 | Yes | No — works independently |
+| In-app preview | Not available | Full preview before download |
+| Python-powered computation | Not available | Real mathematical computation |
 
-### 1. Environment setup
-Copy the example environment file and fill in your values:
+---
+
+## How It Works
+
+ExcelGPT separates **intent** from **computation**. The Cerebras LLM is used *only* to translate your instruction (plus a structural "intelligence brief" of your data) into a typed **action plan** — it never sees raw values and never does arithmetic. Every number is then computed deterministically in Python, so results are auditable and reproducible.
+
+```
+ ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌────────────┐   ┌──────────┐   ┌──────────┐
+ │ Upload  │──▶│ Profile  │──▶│  Intent  │──▶│  Compute   │──▶│  Build   │──▶│ Preview  │
+ │  .xlsx  │   │ (pandas) │   │(Cerebras)│   │(py engine) │   │(openpyxl)│   │ & Refine │
+ └─────────┘   └──────────┘   └──────────┘   └────────────┘   └──────────┘   └──────────┘
+```
+
+1. **Upload** — drag in any `.xlsx`/`.xls`. The file is validated and read.
+2. **Profile** — pandas builds an *intelligence brief*: column types, ranges, Nigerian context (currency, LGA, templates) — structure only, never bulk raw values.
+3. **Intent** — Cerebras returns a strictly-typed action plan (operations, target columns, output sheets). Ambiguous? It asks a clarifying question instead of guessing.
+4. **Compute** — a deterministic engine (pandas, numpy, scipy, statsmodels, scikit-learn) runs every aggregation, ranking, growth, variance, correlation, forecast, and score.
+5. **Build** — openpyxl assembles a styled multi-sheet workbook (Executive Summary, Data, Analysis, Charts, Forecast) with NGN formatting and conditional rules.
+6. **Preview & Refine** — the in-app preview mirrors the workbook; give plain-English feedback and the report recomputes in place, version after version.
+
+---
+
+## Features
+
+- 🇳🇬 **Nigerian-first** — Naira formatting, PENCOM/NHF/PAYE payroll, CBN-style banking summaries, LGA/zone territory analysis, FSO/DSA sales hierarchies.
+- 🧮 **Real computation** — auditable maths in Python; every metric carries the formula used.
+- 💬 **Conversational refinement** — iterate with follow-up instructions; each version keeps its own download.
+- 👁️ **Live preview** — KPI cards, formatted tables, interactive charts, and forecast bands before you download.
+- ⚡ **Powered by Cerebras** — fast intent classification with `gpt-oss-120b`.
+- 📊 **World-class Excel output** — executive-tier styling, embedded charts, conditional formatting.
+
+---
+
+## Tech Stack
+
+**Frontend** — React 18 · Vite · Tailwind CSS · Recharts · Axios · react-dropzone · canvas-confetti
+**Backend** — FastAPI · Uvicorn · Pydantic · python-multipart
+**Data & Compute** — pandas · numpy · scipy · statsmodels · scikit-learn · matplotlib
+**Excel** — openpyxl
+**AI** — Cerebras Cloud API (`gpt-oss-120b`)
+**Infra** — Contabo VPS · Nginx (reverse proxy + TLS) · Let's Encrypt · systemd
+
+---
+
+## API
+
+Base URL: `https://excelgpt.store/api`
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/upload` | Upload a workbook → `session_id`, preview, intelligence brief |
+| `POST` | `/analyse` | Instruction → action plan, computed preview, download token |
+| `POST` | `/refine` | Feedback + history → new version, preview, download token |
+| `GET`  | `/download/{token}` | Stream the generated `.xlsx` |
+| `GET`  | `/status/{session_id}` | Processing status |
+| `GET`  | `/health` | Liveness + version |
+
+Full contract: [`architecture/api-contract.md`](architecture/api-contract.md).
 
 ```bash
-cp .env.example backend/.env
+curl https://excelgpt.store/api/health
+# {"status":"ok","version":"1.0.0","timestamp":"..."}
 ```
 
-Then edit `backend/.env`. Every variable is documented in
-[architecture/environment-variables.md](architecture/environment-variables.md).
+---
 
-### 2. Run the backend
+## Local Development
 
+**Backend**
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+cp .env.example .env          # add your CEREBRAS_API_KEY
+uvicorn main:app --reload --port 8003
 ```
 
-The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-
-### 3. Run the frontend
-
+**Frontend**
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev                   # http://localhost:5173
 ```
 
-The app will be available at `http://localhost:5173` (Vite default).
+---
+
+## Testing
+
+```bash
+cd backend && source .venv/bin/activate
+python -m pytest tests/ -v
+```
+
+Coverage includes the computation engine, intent engine, Excel builder, the refinement loop, **10 end-to-end dataset scenarios** (financial, sales, HR, banking, empty sheets, headerless, mixed types, single-column, 30+ columns, Unicode), and a **50,000-row stress test** (full pipeline under 60s). **47 tests, all passing.**
 
 ---
 
-## API summary
+## Deployment
 
-| Method | Path                | Purpose                                              |
-|--------|---------------------|------------------------------------------------------|
-| POST   | `/upload`           | Upload Excel, get `session_id` + preview + brief     |
-| POST   | `/analyse`          | Send instruction, get action plan + preview + token  |
-| POST   | `/refine`           | Iterate on a report with conversation history        |
-| GET    | `/download/{token}` | Stream the generated `.xlsx` file                    |
-| GET    | `/health`           | Liveness/version check                               |
+ExcelGPT runs on a Contabo VPS:
 
-Full request/response contracts: [architecture/api-contract.md](architecture/api-contract.md).
+- **Nginx** serves the built frontend (`/var/www/excelgpt`) and reverse-proxies `/api/` to Uvicorn on `127.0.0.1:8003`, with TLS terminated by a Let's Encrypt certificate (auto-renewing via `certbot.timer`).
+- **systemd** (`excelgpt-backend.service`) supervises the FastAPI backend with auto-restart.
+
+```bash
+# rebuild & redeploy the frontend
+cd frontend && npm run build
+sudo cp -r dist/. /var/www/excelgpt/ && sudo chown -R www-data:www-data /var/www/excelgpt
+
+# backend service
+sudo systemctl restart excelgpt-backend
+sudo systemctl status  excelgpt-backend
+tail -f backend/logs/service.log
+```
+
+> **Scaling note:** sessions are held in-memory, so the backend runs a single Uvicorn worker. Running multiple workers (or multiple hosts) requires moving session/download state to a shared store such as Redis.
 
 ---
 
-## Nigerian market focus
+## Project Structure
 
-ExcelGPT ships with five template families tuned to Nigerian reporting norms — Banking & Finance, Sales Performance, HR & Payroll, Executive Reports, and LGA/Territory Intelligence. See [architecture/nigerian-templates.md](architecture/nigerian-templates.md). Currency defaults to **NGN (₦)**, and the action plan carries a `nigerian_context` block (currency, template type, fiscal calendar, LGA analysis flag) end-to-end.
+```
+excelgpt/
+├── architecture/        # system design, API contract, schemas (source of truth)
+├── backend/
+│   ├── main.py          # FastAPI app: upload, analyse, refine, download, status, health
+│   ├── logger.py        # structured rotating logs + request timing
+│   ├── config.py        # env-driven configuration
+│   ├── schemas/         # Pydantic models (API, Cerebras, computation)
+│   ├── services/        # reader, profiler, intent engine, computation modules, sheet builders
+│   └── tests/           # unit, e2e, stress
+└── frontend/
+    ├── src/             # React app: upload, preview, charts, refinement
+    ├── vite.config.js   # @vitejs/plugin-react (JSX automatic runtime)
+    └── postcss.config.js# Tailwind + autoprefixer
+```
 
 ---
 
 ## License
 
 Proprietary — © ExcelGPT. All rights reserved.
+
+---
+
+<p align="center"><em>Upload. Describe. Download. — <a href="https://excelgpt.store">excelgpt.store</a></em></p>
