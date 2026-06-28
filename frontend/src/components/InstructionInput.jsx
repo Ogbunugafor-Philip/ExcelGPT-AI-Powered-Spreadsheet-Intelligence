@@ -17,7 +17,7 @@ const buildPrompts = (brief) => {
   return Array.from(new Set(merged)).slice(0, 5)
 }
 
-export default function InstructionInput({ sessionId, intelligenceBrief }) {
+export default function InstructionInput({ sessionId, intelligenceBrief, onAnalyse }) {
   const [instruction, setInstruction] = useState('')
   const [isAnalysing, setIsAnalysing] = useState(false)
   const [error, setError] = useState('')
@@ -44,6 +44,10 @@ export default function InstructionInput({ sessionId, intelligenceBrief }) {
       const data = await analyseInstruction(sessionId, trimmed)
       setPlan(data.action_plan)
       setElapsedMs(Math.round(performance.now() - startedAt))
+      // Lift the computed report preview up to App unless a clarification is needed.
+      if (onAnalyse && !data.action_plan?.clarification_needed) {
+        onAnalyse(data, trimmed)
+      }
     } catch (err) {
       setError(err.message || 'Could not generate an action plan.')
       setPlan(null)

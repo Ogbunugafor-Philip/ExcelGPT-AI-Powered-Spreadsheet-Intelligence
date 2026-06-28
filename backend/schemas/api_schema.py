@@ -45,12 +45,90 @@ class ChartPreview(BaseModel):
     recharts_data: list[Any] = Field(default_factory=list)
 
 
-class ReportPreview(BaseModel):
-    """Preview returned by /analyse and /refine (report shape)."""
+# ---------------------------------------------------------------------------
+# Phase 6 — In-App Preview Layer
+#
+# These models mirror, field-for-field, what the Excel writer renders so the
+# frontend preview closely matches the downloaded workbook (same KPIs, tables,
+# charts, rankings, growth, forecast).
+# ---------------------------------------------------------------------------
 
-    sheets: list[SheetPreview] = Field(default_factory=list)
+
+class ExecutiveSummaryPreview(BaseModel):
+    title: str = ""
+    period: str = ""
+    data_source: str = ""
     kpi_cards: list[KpiCardPreview] = Field(default_factory=list)
+
+
+class PreviewColumn(BaseModel):
+    name: str
+    type: Literal["currency", "percentage", "date", "number", "text"] = "text"
+
+
+class ConditionalFormatPreview(BaseModel):
+    column: str
+    rule: str
+    color: str
+
+
+class ReportSheetPreview(BaseModel):
+    """A computed output sheet rendered as a formatted table in the preview."""
+
+    sheet_name: Literal["data", "analysis", "charts", "forecast"]
+    display_name: str
+    columns: list[PreviewColumn] = Field(default_factory=list)
+    rows: list[Any] = Field(default_factory=list)
+    conditional_formatting: list[ConditionalFormatPreview] = Field(default_factory=list)
+
+
+class MetricPreview(BaseModel):
+    label: str
+    value: str
+    formula_used: str = ""
+
+
+class RankingPreview(BaseModel):
+    rank: Optional[int] = None
+    label: str = ""
+    value: str = ""
+    change: str = ""
+    direction: Literal["up", "down", "neutral"] = "neutral"
+
+
+class GrowthRowPreview(BaseModel):
+    label: str = ""
+    current: str = ""
+    previous: str = ""
+    growth_rate: str = ""
+    direction: Literal["up", "down", "neutral"] = "neutral"
+
+
+class ForecastPointPreview(BaseModel):
+    period: str = ""
+    value: Optional[float] = None
+
+
+class ForecastPreview(BaseModel):
+    historical: list[ForecastPointPreview] = Field(default_factory=list)
+    projected: list[ForecastPointPreview] = Field(default_factory=list)
+    confidence_upper: list[ForecastPointPreview] = Field(default_factory=list)
+    confidence_lower: list[ForecastPointPreview] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class ReportPreview(BaseModel):
+    """Preview returned by /analyse and /refine (full report shape, Phase 6)."""
+
+    executive_summary: ExecutiveSummaryPreview = Field(default_factory=ExecutiveSummaryPreview)
+    sheets: list[ReportSheetPreview] = Field(default_factory=list)
     charts: list[ChartPreview] = Field(default_factory=list)
+    forecast: Optional[ForecastPreview] = None
+    metrics: list[MetricPreview] = Field(default_factory=list)
+    rankings: list[RankingPreview] = Field(default_factory=list)
+    growth_table: list[GrowthRowPreview] = Field(default_factory=list)
+    # Retained for backward compatibility with earlier consumers.
+    kpi_cards: list[KpiCardPreview] = Field(default_factory=list)
 
 
 class HistoryTurn(BaseModel):

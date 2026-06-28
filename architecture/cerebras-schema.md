@@ -14,7 +14,7 @@ The **action plan** is the only thing the Cerebras LLM produces. It is *intent*,
   "operations": [
     {
       "operation_id": "string",
-      "operation_type": "group_sum | group_avg | rank | filter | growth_rate | correlation | forecast | cluster | score | chart",
+      "operation_type": "group_sum | group_avg | rank | filter | growth_rate | variance | correlation | outlier | distribution | forecast | cluster | score | chart",
       "target_sheet": "string",
       "target_columns": ["string"],
       "group_by": ["string"],
@@ -84,7 +84,10 @@ The **action plan** is the only thing the Cerebras LLM produces. It is *intent*,
 | `rank` | pandas/numpy | `{ "by": "deposits_ngn", "order": "desc", "top_n": 10 }` |
 | `filter` | pandas | `{ "where": "deposits_ngn > 100000000" }` |
 | `growth_rate` | pandas/numpy | `{ "period": "quarter", "as_percent": true }` |
+| `variance` | pandas/numpy | `{ "actual": "actual_col", "target": "target_col" }` |
 | `correlation` | scipy | `{ "method": "pearson" }` |
+| `outlier` | scipy/numpy | `{ "method": "iqr" }` |
+| `distribution` | scipy.stats | `{ }` |
 | `forecast` | statsmodels | `{ "model": "arima", "periods": 3, "confidence": 0.95 }` |
 | `cluster` | scikit-learn | `{ "algorithm": "kmeans", "k": 4 }` |
 | `score` | scikit-learn | `{ "weights": { "growth": 0.5, "volume": 0.5 } }` |

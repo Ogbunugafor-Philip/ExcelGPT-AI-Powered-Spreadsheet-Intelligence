@@ -155,9 +155,18 @@ class IntentEngine:
             raise IntentEngineError("Instruction is empty.")
 
         user_message = self._build_user_message(intelligence_brief, instruction)
-        raw = self._call_cerebras(user_message)
-        data = self._parse_json(raw)
-        return self._normalize(data)
+
+        # Reasoning models occasionally truncate or wrap their JSON; retry once
+        # before giving up so a single bad generation doesn't fail the request.
+        last_error: IntentEngineError | None = None
+        for _ in range(2):
+            raw = self._call_cerebras(user_message)
+            try:
+                data = self._parse_json(raw)
+                return self._normalize(data)
+            except IntentEngineError as exc:
+                last_error = exc
+        raise last_error or IntentEngineError("Cerebras did not return a valid action plan.")
 
     # -- prompt construction ------------------------------------------------
 

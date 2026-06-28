@@ -20,7 +20,9 @@ CEREBRAS_API_KEY: str = os.getenv("CEREBRAS_API_KEY", "")
 CEREBRAS_MODEL: str = os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")
 CEREBRAS_TIMEOUT_SECONDS: float = float(os.getenv("CEREBRAS_TIMEOUT_SECONDS", "20"))
 CEREBRAS_TEMPERATURE: float = float(os.getenv("CEREBRAS_TEMPERATURE", "0.1"))
-CEREBRAS_MAX_TOKENS: int = int(os.getenv("CEREBRAS_MAX_TOKENS", "1200"))
+# Reasoning models (e.g. gpt-oss-120b) spend tokens on hidden reasoning before
+# emitting the JSON, so the budget must comfortably exceed the plan size.
+CEREBRAS_MAX_TOKENS: int = int(os.getenv("CEREBRAS_MAX_TOKENS", "4000"))
 ALLOWED_ORIGINS: list[str] = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
