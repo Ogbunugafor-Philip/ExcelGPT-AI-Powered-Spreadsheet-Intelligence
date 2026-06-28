@@ -9,7 +9,9 @@ os.environ directly. See architecture/environment-variables.md for full docs.
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True makes backend/.env the source of truth, even when a stale
+# variable of the same name already exists in the process environment.
+load_dotenv(override=True)
 
 # ---------------------------------------------------------------------------
 # Environment variables
