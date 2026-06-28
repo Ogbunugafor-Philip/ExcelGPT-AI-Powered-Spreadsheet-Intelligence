@@ -1,0 +1,46 @@
+# ===========================================================================
+# ExcelGPT — Git ignore
+# ===========================================================================
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Python (backend) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# --- Node (frontend) ---
+node_modules/
+dist/
+.next/
+.vite/
+*.local
+
+# --- Runtime storage (uploads, generated reports, chart images) ---
+storage/
+backend/storage/
+*.xlsx
+*.xls
+!**/templates/*.xlsx
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

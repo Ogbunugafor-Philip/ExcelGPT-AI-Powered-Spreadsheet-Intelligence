@@ -1,0 +1,117 @@
+/* ===========================================================================
+   ExcelGPT — Global stylesheet & design tokens
+   Navy / electric-blue executive theme. See src/design-system.md for rules.
+   =========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   CSS custom properties — the single source of truth for the design system.
+   Tailwind mirrors these in tailwind.config.js for utility classes.
+   --------------------------------------------------------------------------- */
+:root {
+  /* Color system */
+  --color-navy: #0a0f1e;          /* primary background */
+  --color-navy-light: #111827;    /* raised surfaces / cards */
+  --color-blue-electric: #2563eb; /* primary accent / CTAs */
+  --color-blue-glow: #3b82f6;     /* hover / focus glow */
+  --color-emerald: #10b981;       /* success / positive */
+  --color-amber: #f59e0b;         /* warning */
+  --color-red-alert: #ef4444;     /* danger / negative */
+  --color-gold: #d97706;          /* premium / executive tier */
+  --color-text-primary: #f9fafb;  /* primary text */
+  --color-text-secondary: #9ca3af;/* secondary / muted text */
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  /* Spacing scale (4px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Radius & elevation */
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-glow: 0 0 0 1px rgba(59, 130, 246, 0.4), 0 8px 24px rgba(37, 99, 235, 0.25);
+}
+
+/* ---------------------------------------------------------------------------
+   Base styles
+   --------------------------------------------------------------------------- */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-navy);
+    color: var(--color-text-primary);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+  }
+
+  h1, h2, h3, h4 {
+    line-height: var(--leading-tight);
+    font-weight: 700;
+    color: var(--color-text-primary);
+  }
+
+  ::selection {
+    background: var(--color-blue-electric);
+    color: var(--color-text-primary);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Reusable component classes
+   --------------------------------------------------------------------------- */
+@layer components {
+  .eg-card {
+    background-color: var(--color-navy-light);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .eg-btn-primary {
+    background-color: var(--color-blue-electric);
+    color: var(--color-text-primary);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    transition: box-shadow 150ms ease, background-color 150ms ease;
+  }
+
+  .eg-btn-primary:hover {
+    background-color: var(--color-blue-glow);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .eg-text-muted {
+    color: var(--color-text-secondary);
+  }
+}
