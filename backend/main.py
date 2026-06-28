@@ -474,6 +474,21 @@ async def download(token: str) -> FileResponse:
     )
 
 
+@app.get("/status/{session_id}")
+async def status(session_id: str) -> dict[str, object]:
+    """Processing status for a session (Phase 8).
+
+    Uploads complete synchronously today, so an existing session is always
+    ``ready``; the endpoint exists so the frontend can poll large-file reads
+    without changing the contract once background ingestion is enabled.
+    """
+    session = session_manager.get_session(session_id)  # 404 if unknown/expired
+    return {
+        "status": session.get("status", "ready"),
+        "progress": int(session.get("progress", 100)),
+    }
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     return HealthResponse(

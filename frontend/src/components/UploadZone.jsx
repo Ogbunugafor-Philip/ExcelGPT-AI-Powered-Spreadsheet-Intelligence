@@ -1,97 +1,160 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { CheckCircle2, UploadCloud, AlertCircle } from 'lucide-react'
+import { CheckCircle2, FileSpreadsheet, UploadCloud, X } from 'lucide-react'
 import { uploadFile } from '../services/api'
+import ErrorMessage from './ErrorMessage'
+
+const MAX_BYTES = 50 * 1024 * 1024 // 50MB
+
+const formatSize = (bytes) => `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 
 export default function UploadZone({ onUploadComplete }) {
-  const [isUploading, setIsUploading] = useState(false)
-  const [error, setError] = useState('')
-  const [fileName, setFileName] = useState('')
-  const [fileSize, setFileSize] = useState('')
-  const [isSuccess, setIsSuccess] = useState(false)
+  const [phase, setPhase] = useState('idle') // idle | accepted | uploading | success | error
+  const [errorKey, setErrorKey] = useState(null)
+  const [customError, setCustomError] = useState('')
+  const [fileMeta, setFileMeta] = useState(null) // { name, size }
+  const [progress, setProgress] = useState(0)
+  const cancelledRef = useRef(false)
+
+  const reset = () => {
+    cancelledRef.current = true
+    setPhase('idle')
+    setErrorKey(null)
+    setCustomError('')
+    setFileMeta(null)
+    setProgress(0)
+  }
 
   const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
-    setError('')
-    setIsSuccess(false)
-    if (rejectedFiles.length) {
-      setError('Please upload a valid .xlsx or .xls file.')
+    setErrorKey(null)
+    setCustomError('')
+    cancelledRef.current = false
+
+    if (rejectedFiles?.length) {
+      setPhase('error')
+      setErrorKey('INVALID_FILE_TYPE')
+      return
+    }
+    const file = acceptedFiles?.[0]
+    if (!file) return
+
+    if (file.size > MAX_BYTES) {
+      setPhase('error')
+      setErrorKey('FILE_TOO_LARGE')
+      return
+    }
+    if (file.size === 0) {
+      setPhase('error')
+      setErrorKey('EMPTY_FILE')
       return
     }
 
-    const file = acceptedFiles[0]
-    if (!file) {
-      return
-    }
-
-    setFileName(file.name)
-    setFileSize(`${(file.size / (1024 * 1024)).toFixed(2)} MB`)
-    setIsUploading(true)
+    setFileMeta({ name: file.name, size: formatSize(file.size) })
+    setProgress(0)
+    setPhase('accepted')
+    // brief accept pulse, then begin uploading
+    setTimeout(() => setPhase('uploading'), 320)
 
     try {
-      const data = await uploadFile(file)
-      setIsSuccess(true)
-      onUploadComplete?.(data.session_id, data.preview, data.intelligence_brief)
+      const data = await uploadFile(file, (pct) => {
+        if (!cancelledRef.current) setProgress(pct)
+      })
+      if (cancelledRef.current) return
+      setProgress(100)
+      setPhase('success')
+      // let the success checkmark play before swapping views
+      setTimeout(() => {
+        if (!cancelledRef.current) {
+          onUploadComplete?.(data.session_id, data.preview, data.intelligence_brief)
+        }
+      }, 600)
     } catch (err) {
-      setError(err.message || 'Upload failed.')
-    } finally {
-      setIsUploading(false)
+      if (cancelledRef.current) return
+      setPhase('error')
+      setErrorKey(err.errorKey || 'UNKNOWN')
+      setCustomError(err.errorKey ? '' : err.message)
     }
   }, [onUploadComplete])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.ms-excel': ['.xls'],
     },
     multiple: false,
+    noClick: phase === 'uploading',
   })
 
-  const statusTone = useMemo(() => {
-    if (error) return 'border-red-alert text-red-alert'
-    if (isSuccess) return 'border-emerald text-emerald'
-    if (isUploading) return 'border-blue-electric text-text-primary'
-    return 'border-blue-electric/60 text-text-primary'
-  }, [error, isSuccess, isUploading])
+  if (phase === 'error') {
+    return (
+      <section className="mx-auto w-full max-w-[600px]" aria-label="Upload error">
+        <ErrorMessage
+          errorKey={errorKey}
+          customMessage={customError}
+          onAction={() => { reset(); open() }}
+          onDismiss={reset}
+        />
+      </section>
+    )
+  }
+
+  const dragging = isDragActive
+  const dropClasses = [
+    'relative mt-2 rounded-2xl p-8 sm:p-12 text-center transition-all duration-200 cursor-pointer glass',
+    dragging
+      ? 'eg-rotating-border border border-solid border-blue-electric bg-blue-electric/[0.08]'
+      : 'border-2 border-dashed border-border-subtle hover:border-blue-electric hover:bg-blue-electric/[0.05] hover:glow-blue',
+    phase === 'accepted' ? 'eg-anim-accept border-emerald' : '',
+  ].join(' ')
 
   return (
-    <section className="eg-card p-8" aria-label="Upload">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold">Upload your workbook</h2>
-          <p className="eg-text-muted mt-2">Drop an .xlsx or .xls file to start the data intelligence layer.</p>
-        </div>
-        <div className="rounded-full border border-blue-electric/40 bg-blue-electric/10 px-3 py-1 text-sm text-blue-electric">
-          Phase 2
-        </div>
-      </div>
-
-      <div
-        {...getRootProps()}
-        className={`mt-6 rounded-2xl border-2 border-dashed bg-navy p-8 text-center transition-all duration-200 ${statusTone} ${isDragActive ? 'scale-[1.01] shadow-glow' : 'hover:shadow-glow'}`}
-      >
+    <section className="mx-auto w-full max-w-[600px]" aria-label="Upload">
+      <div {...getRootProps()} className={dropClasses}>
         <input {...getInputProps()} />
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-electric/15">
-          {error ? <AlertCircle className="h-8 w-8" /> : isSuccess ? <CheckCircle2 className="h-8 w-8" /> : <UploadCloud className="h-8 w-8" />}
-        </div>
-        <p className="mt-4 text-lg font-semibold">
-          {isUploading ? 'Uploading and profiling your workbook…' : isDragActive ? 'Drop the workbook here' : 'Drag & drop your Excel file'}
-        </p>
-        <p className="eg-text-muted mt-2">Accepted formats: .xlsx and .xls</p>
 
-        {isUploading ? (
-          <div className="mx-auto mt-6 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-full animate-pulse rounded-full bg-blue-electric" />
+        {phase === 'success' ? (
+          <div className="flex flex-col items-center">
+            <CheckCircle2 className="eg-anim-check h-16 w-16 text-emerald" />
+            <p className="text-subheading mt-4 text-emerald">File uploaded successfully</p>
+            {fileMeta ? <p className="mt-1 text-small text-text-muted">{fileMeta.name}</p> : null}
           </div>
-        ) : null}
-
-        {fileName ? (
-          <div className="mt-5 text-sm text-text-secondary">
-            <span className="font-medium text-text-primary">{fileName}</span> • {fileSize}
+        ) : phase === 'uploading' ? (
+          <div className="flex flex-col items-center">
+            <FileSpreadsheet className="h-14 w-14 text-blue-electric" />
+            {fileMeta ? (
+              <p className="text-subheading mt-4 text-white">{fileMeta.name}</p>
+            ) : null}
+            <div className="mt-5 h-1 w-full max-w-md overflow-hidden rounded-full bg-navy-light">
+              <div className="eg-progress-fill h-full rounded-full transition-all duration-200" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="mt-3 text-small text-text-secondary">Uploading... {progress}%</p>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); reset() }}
+              className="mt-3 inline-flex items-center gap-1 text-micro text-text-muted transition hover:text-text-secondary"
+            >
+              <X className="h-3.5 w-3.5" /> Cancel
+            </button>
           </div>
-        ) : null}
+        ) : (
+          <div className={`flex flex-col items-center transition-transform duration-200 ${dragging ? 'scale-[1.01]' : ''}`}>
+            <UploadCloud className={`h-14 w-14 transition-colors ${dragging ? 'text-blue-electric' : 'text-text-secondary'}`} />
+            <p className="text-subheading mt-4 text-white">
+              {dragging ? 'Release to upload' : 'Drop your Excel file here'}
+            </p>
+            <p className="mt-2 text-small text-text-muted">or click to browse — .xlsx and .xls supported</p>
+            <p className="mt-3 text-micro text-text-muted">Maximum 50MB</p>
 
-        {error ? <p className="mt-4 text-sm text-red-alert">{error}</p> : null}
+            {fileMeta && phase === 'accepted' ? (
+              <div className="eg-anim-slide-up mt-5 flex items-center gap-2 rounded-lg border border-border-subtle bg-navy-light/60 px-3 py-2 text-small">
+                <FileSpreadsheet className="h-4 w-4 text-emerald" />
+                <span className="font-medium text-text-primary">{fileMeta.name}</span>
+                <span className="text-text-muted">• {fileMeta.size}</span>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </section>
   )

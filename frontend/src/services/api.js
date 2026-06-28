@@ -5,20 +5,55 @@ const api = axios.create({
   timeout: 120000,
 })
 
+// Map an axios error to one of our friendly ERROR_MESSAGES keys (see
+// utils/errorMessages.js). URL-aware so the same status reads correctly per route.
+const classifyError = (error) => {
+  const url = error?.config?.url || ''
+  const status = error?.response?.status
+  const isUpload = url.includes('/upload')
+  const isDownload = url.includes('/download')
+  const isAI = url.includes('/analyse') || url.includes('/refine')
+
+  if (!error.response) {
+    if (error.code === 'ECONNABORTED') return isAI ? 'CEREBRAS_TIMEOUT' : 'NETWORK_ERROR'
+    return 'NETWORK_ERROR'
+  }
+  switch (status) {
+    case 413: return 'FILE_TOO_LARGE'
+    case 400: return isUpload ? 'INVALID_FILE_TYPE' : 'COMPUTATION_ERROR'
+    case 422: return isUpload ? 'EMPTY_FILE' : 'COMPUTATION_ERROR'
+    case 404: return isDownload ? 'DOWNLOAD_FAILED' : 'SESSION_EXPIRED'
+    case 410: return 'SESSION_EXPIRED'
+    case 500: return isDownload ? 'DOWNLOAD_FAILED' : 'COMPUTATION_ERROR'
+    case 502:
+    case 503:
+    case 504: return 'CEREBRAS_TIMEOUT'
+    default: return 'UNKNOWN'
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const message = error?.response?.data?.detail || error?.message || 'Request failed.'
-    return Promise.reject(new Error(message))
+    const normalised = new Error(message)
+    normalised.errorKey = classifyError(error)
+    normalised.status = error?.response?.status
+    return Promise.reject(normalised)
   },
 )
 
-export const uploadFile = async (file) => {
+export const uploadFile = async (file, onProgress) => {
   const formData = new FormData()
   formData.append('file', file)
 
   const { data } = await api.post('/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (event) => {
+      if (!onProgress) return
+      const percent = event.total ? Math.round((event.loaded * 100) / event.total) : 0
+      onProgress(percent)
+    },
   })
 
   return data
@@ -42,6 +77,12 @@ export const refineReport = async ({ session_id, feedback, history, current_vers
     current_version,
   })
 
+  return data
+}
+
+// Poll processing status for a session (used for large-file background reads).
+export const getStatus = async (sessionId) => {
+  const { data } = await api.get(`/status/${sessionId}`)
   return data
 }
 

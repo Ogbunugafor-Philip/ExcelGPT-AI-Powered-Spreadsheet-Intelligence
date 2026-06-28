@@ -82,9 +82,9 @@ export default function PreviewPanel({ preview, downloadToken, version, onDownlo
 
   return (
     <section className="eg-card p-6 lg:p-8" aria-label="Report preview">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="flex flex-col items-stretch justify-between gap-4 border-b border-white/10 pb-4 sm:flex-row sm:items-center">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex flex-wrap gap-1">
+          <div className="flex gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const active = tab.key === currentTab
               return (
@@ -111,7 +111,7 @@ export default function PreviewPanel({ preview, downloadToken, version, onDownlo
           type="button"
           onClick={handleDownload}
           disabled={downloading || (!downloadToken && !onDownload)}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald px-5 py-2.5 text-small font-semibold text-white transition hover:bg-emerald/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {downloading ? 'Preparing…' : 'Download Excel'}

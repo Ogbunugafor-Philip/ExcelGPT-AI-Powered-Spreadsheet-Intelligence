@@ -61,7 +61,7 @@ export default function RefinementInput({
       {history.length ? (
         <div
           ref={scrollRef}
-          className="mt-6 max-h-[300px] space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-navy p-4"
+          className="mt-6 max-h-[50vh] space-y-3 overflow-y-auto rounded-2xl border border-white/10 bg-navy p-4 sm:max-h-[300px]"
         >
           {history.map((turn, index) => {
             const isUser = turn.role === 'user'
@@ -108,7 +108,10 @@ export default function RefinementInput({
 
       <p className="mt-6 text-sm text-text-secondary">Version {version} — Refine to update</p>
 
-      <form className="mt-2" onSubmit={handleSubmit}>
+      <form
+        className="sticky bottom-0 z-10 -mx-6 mt-2 bg-navy-light/95 px-6 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-0 lg:-mx-8 lg:px-8"
+        onSubmit={handleSubmit}
+      >
         <textarea
           value={feedback}
           onChange={(event) => setFeedback(event.target.value)}

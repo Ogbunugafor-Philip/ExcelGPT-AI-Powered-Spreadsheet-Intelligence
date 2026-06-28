@@ -28,7 +28,7 @@ ALLOWED_ORIGINS: list[str] = [
     for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
     if origin.strip()
 ]
-MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "25"))
+MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
 UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./storage/uploads")
 SESSION_EXPIRY_MINUTES: int = int(os.getenv("SESSION_EXPIRY_MINUTES", "60"))
 BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8003"))

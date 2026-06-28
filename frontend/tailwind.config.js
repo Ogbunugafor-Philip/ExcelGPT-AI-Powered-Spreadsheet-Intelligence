@@ -8,6 +8,7 @@ export default {
       colors: {
         navy: '#0A0F1E', // primary background
         'navy-light': '#111827', // raised surfaces / cards
+        'navy-card': '#1A2235', // elevated cards / modals
         'blue-electric': '#2563EB', // primary accent / CTAs
         'blue-glow': '#3B82F6', // hover / focus glow
         emerald: '#10B981', // success / positive direction
@@ -16,9 +17,11 @@ export default {
         gold: '#D97706', // premium / executive tier
         'text-primary': '#F9FAFB', // primary text
         'text-secondary': '#9CA3AF', // secondary / muted text
+        'text-muted': '#6B7280', // lowest-contrast supporting text
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         glow: '0 0 0 1px rgba(59, 130, 246, 0.4), 0 8px 24px rgba(37, 99, 235, 0.25)',
