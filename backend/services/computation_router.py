@@ -89,21 +89,24 @@ class ComputationRouter:
         if ent_i is None:
             return []
 
+        entity_col = cols[ent_i]
         branches = [r[ent_i] for r in rows]
         deposits = [r[dep_i] for r in rows]
+        top_n = len(branches)
         target_sheet = next(iter(sheets), "Sheet1")
         charts: list[dict[str, Any]] = []
 
-        df1 = pd.DataFrame({"Branch": branches, ranked_by: deposits})
+        # Chart 1 — Top N branches by the ranked metric (horizontal bar).
+        df1 = pd.DataFrame({entity_col: branches, ranked_by: deposits})
         op1 = Operation(
             operation_id="auto_chart_primary", operation_type="chart", target_sheet=target_sheet,
-            target_columns=["Branch", ranked_by], group_by=[],
-            parameters={"chart_type": "bar", "x": "Branch", "y": ranked_by},
-            output_sheet="charts", output_label=f"Top {len(branches)} Branches by {ranked_by} (₦)",
+            target_columns=[entity_col, ranked_by], group_by=[],
+            parameters={"chart_type": "bar", "x": entity_col, "y": ranked_by, "top_n": top_n},
+            output_sheet="charts", output_label=f"Top {top_n} Branches by {ranked_by} (₦)",
         )
         charts.append(self.chart.execute(op1, df1, str(charts_dir)))
 
-        # Variance chart (positive green / negative red) when a target exists.
+        # Chart 2 — Deposits vs Target comparison LINE chart when a target exists.
         var_op = next((op for op in action_plan.operations if op.operation_type == "variance"), None)
         target_col = None
         if var_op:
@@ -112,18 +115,15 @@ class ComputationRouter:
             target_col = next((c for c in cols if str(c).lower() in ("target", "budget", "goal", "plan")), None)
         if target_col in cols:
             tgt_i = cols.index(target_col)
-            variance = [
-                (r[dep_i] - r[tgt_i]) if isinstance(r[dep_i], (int, float)) and isinstance(r[tgt_i], (int, float)) else None
-                for r in rows
-            ]
-            df2 = pd.DataFrame({"Branch": branches, "Variance": variance})
+            targets = [r[tgt_i] for r in rows]
+            df2 = pd.DataFrame({entity_col: branches, ranked_by: deposits, target_col: targets})
             op2 = Operation(
                 operation_id="auto_chart_variance", operation_type="chart", target_sheet=target_sheet,
-                target_columns=["Branch", "Variance"], group_by=[],
-                parameters={"chart_type": "bar", "x": "Branch", "y": "Variance", "diverging": True},
-                output_sheet="charts", output_label="Variance vs Target per Branch",
+                target_columns=[entity_col, ranked_by, target_col], group_by=[],
+                parameters={"chart_type": "line", "top_n": top_n},
+                output_sheet="charts", output_label=f"{ranked_by} vs Target — Top {top_n} Branches",
             )
-            charts.append(self.chart.execute(op2, df2, str(charts_dir)))
+            charts.append(self.chart.comparison(op2, df2, str(charts_dir), entity_col, ranked_by, target_col))
 
         return [c for c in charts if c and c.get("image_path")]
 
