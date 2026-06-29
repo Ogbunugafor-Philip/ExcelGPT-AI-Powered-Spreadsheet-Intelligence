@@ -55,17 +55,21 @@ class ChartGenerator:
         result["x_label"] = x_label
         result["y_label"] = y_label
 
-        charts_dir = Path(output_dir)
+        charts_dir = Path(output_dir).resolve()
         charts_dir.mkdir(parents=True, exist_ok=True)
-        image_path = charts_dir / f"{operation.operation_id}.png"
+        image_path = (charts_dir / f"{operation.operation_id}.png").resolve()
 
         try:
             recharts = self._render(chart_type, df, x_col, y_col, result["title"], str(image_path), x_label, y_label)
-            result["image_path"] = str(image_path)
+            # Verify the PNG actually landed before handing the path downstream.
+            assert image_path.exists(), f"chart PNG was not written: {image_path}"
+            print(f"Chart saved: {image_path} ({image_path.stat().st_size} bytes)")
+            result["image_path"] = str(image_path)  # absolute path for openpyxl embedding
             result["recharts_data"] = recharts
         except Exception as exc:  # noqa: BLE001 — a chart failure must not abort the report
             plt.close("all")
             result["warnings"].append(f"Chart rendering failed: {exc}")
+            print(f"Chart FAILED for {operation.operation_id}: {exc}")
         return result
 
     # -- axis resolution ----------------------------------------------------

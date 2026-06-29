@@ -52,6 +52,8 @@ class AnalysisSheet(BaseModel):
     metrics: list[Metric] = Field(default_factory=list)
     rankings: list[Any] = Field(default_factory=list)
     growth_table: list[Any] = Field(default_factory=list)
+    # Real, computed bullet-point observations (3–5) about the result.
+    insights: list[str] = Field(default_factory=list)
 
 
 class Chart(BaseModel):

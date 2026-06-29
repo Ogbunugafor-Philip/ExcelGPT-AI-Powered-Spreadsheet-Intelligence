@@ -33,7 +33,7 @@ class ForecastSheet:
         border = S.box(S.BLUE_ELECTRIC, "thin")
         for idx, head in enumerate(HEADERS, start=1):
             S.style_cell(ws.cell(row=header_row, column=idx), value=head,
-                         font_=S.font(11, bold=True, color=S.WHITE), fill_=S.fill(S.BLUE_ELECTRIC),
+                         font_=S.font(11, bold=True, color=S.HEADER_FONT), fill_=S.fill(S.HEADER_BG),
                          align=S.CENTER, border=border)
         ws.freeze_panes = "A2"
 
@@ -44,17 +44,17 @@ class ForecastSheet:
         row = self._assumptions(ws, forecast.get("assumptions", []), row + 1)
         self._maybe_chart(ws, forecast, row + 1)
 
-        S.paint_canvas(ws, max_row=max(row + 1, 4), max_col=5, color=S.NAVY)
+        S.paint_canvas(ws, max_row=max(row + 1, 4), max_col=5, color=S.ROW_MAIN)
 
     def _historical_rows(self, ws, historical, row):
         for point in historical or []:
             S.style_cell(ws.cell(row=row, column=1), value=point.get("period"),
-                         font_=S.font(10, color=S.WHITE), fill_=S.fill(S.NAVY), align=S.LEFT)
+                         font_=S.font(10, color=S.TEXT_DARK), fill_=S.fill(S.ROW_MAIN), align=S.LEFT)
             S.style_cell(ws.cell(row=row, column=2), value=self._num(point.get("value")),
-                         font_=S.font(10, color=S.WHITE), fill_=S.fill(S.NAVY), align=S.RIGHT, number_format='#,##0.00')
+                         font_=S.font(10, color=S.TEXT_DARK), fill_=S.fill(S.ROW_MAIN), align=S.RIGHT, number_format='#,##0.00')
             for col in (3, 4, 5):
                 S.style_cell(ws.cell(row=row, column=col), value="-",
-                             font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.NAVY), align=S.CENTER)
+                             font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.ROW_MAIN), align=S.CENTER)
             row += 1
         return row
 
@@ -65,16 +65,16 @@ class ForecastSheet:
         for point in projected:
             period = point.get("period")
             S.style_cell(ws.cell(row=row, column=1), value=period,
-                         font_=S.font(10, italic=True, color=S.BLUE_ELECTRIC), fill_=S.fill(S.NAVY_LIGHT), align=S.LEFT)
+                         font_=S.font(10, italic=True, color=S.BLUE_ELECTRIC), fill_=S.fill(S.ROW_ALT), align=S.LEFT)
             S.style_cell(ws.cell(row=row, column=2), value="-",
-                         font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.NAVY_LIGHT), align=S.CENTER)
+                         font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.ROW_ALT), align=S.CENTER)
             S.style_cell(ws.cell(row=row, column=3), value=self._num(point.get("value")),
-                         font_=S.font(10, italic=True, color=S.BLUE_ELECTRIC), fill_=S.fill(S.NAVY_LIGHT),
+                         font_=S.font(10, italic=True, color=S.BLUE_ELECTRIC), fill_=S.fill(S.ROW_ALT),
                          align=S.RIGHT, number_format='#,##0.00')
             S.style_cell(ws.cell(row=row, column=4), value=self._num(upper.get(period)),
-                         font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.NAVY_LIGHT), align=S.RIGHT, number_format='#,##0.00')
+                         font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.ROW_ALT), align=S.RIGHT, number_format='#,##0.00')
             S.style_cell(ws.cell(row=row, column=5), value=self._num(lower.get(period)),
-                         font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.NAVY_LIGHT), align=S.RIGHT, number_format='#,##0.00')
+                         font_=S.font(9, color=S.GREY_TEXT), fill_=S.fill(S.ROW_ALT), align=S.RIGHT, number_format='#,##0.00')
             row += 1
         return row
 
@@ -86,7 +86,7 @@ class ForecastSheet:
         for assumption in assumptions or ["No assumptions recorded."]:
             ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=5)
             S.style_cell(ws.cell(row=row, column=1), value=f"•  {assumption}",
-                         font_=S.font(10, color=S.WHITE), align=S.LEFT)
+                         font_=S.font(10, color=S.TEXT_DARK), align=S.LEFT)
             row += 1
         return row
 

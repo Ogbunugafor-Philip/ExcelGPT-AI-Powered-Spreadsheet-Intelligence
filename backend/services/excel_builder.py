@@ -44,14 +44,14 @@ class ExcelBuilder:
         ws = wb.create_sheet("Executive Summary")
         self.executive.build(ws, data.get("executive_summary", {}))
 
-        # Data — skip when there are no columns.
+        # Data — the PRIMARY question-driven result; skip when there are no columns.
         data_sheet = data.get("data_sheet", {})
         if data_sheet.get("columns"):
-            self.data.build(wb.create_sheet("Data"), data_sheet)
+            self.data.build(wb.create_sheet("Data"), data_sheet, output=data)
 
         # Analysis — skip when nothing derived.
         analysis = data.get("analysis_sheet", {})
-        if analysis.get("metrics") or analysis.get("rankings") or analysis.get("growth_table"):
+        if analysis.get("metrics") or analysis.get("rankings") or analysis.get("growth_table") or analysis.get("insights"):
             self.analysis.build(wb.create_sheet("Analysis"), analysis)
 
         # Charts — skip when none rendered.
