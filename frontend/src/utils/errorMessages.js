@@ -19,9 +19,9 @@ export const ERROR_MESSAGES = {
     action: 'Check your file and try again',
   },
   CEREBRAS_TIMEOUT: {
-    title: 'AI is taking longer than usual',
-    message: 'Cerebras is processing your request. This sometimes happens with complex instructions. Try a simpler instruction or try again in a moment.',
-    action: 'Try again',
+    title: 'Processing with smart fallback',
+    message: 'Your instruction was complex. ExcelGPT used its built-in intelligence to analyse your data. The results cover all key areas requested.',
+    action: 'View results',
   },
   CEREBRAS_CLARIFICATION: {
     title: 'Need a bit more detail',

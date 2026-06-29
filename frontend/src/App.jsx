@@ -4,7 +4,7 @@ import './index.css'
 import UploadZone from './components/UploadZone'
 import DataPreview from './components/DataPreview'
 import InstructionInput from './components/InstructionInput'
-import ProgressIndicator from './components/ProgressIndicator'
+import ProgressIndicator, { FallbackBanner } from './components/ProgressIndicator'
 import { downloadFile, refineReport } from './services/api'
 
 // Lazy-load the heavier post-analysis surfaces so the initial bundle stays lean.
@@ -43,6 +43,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('upload')
   const [reportPreview, setReportPreview] = useState(null)
   const [downloadToken, setDownloadToken] = useState(null)
+  const [aiStatus, setAiStatus] = useState('cerebras') // 'cerebras' | 'fallback'
   const [version, setVersion] = useState(0)
   const [refinementHistory, setRefinementHistory] = useState([])
   const [refinementCount, setRefinementCount] = useState(0)
@@ -92,6 +93,7 @@ export default function App() {
     setIntelligenceBrief(nextIntelligenceBrief)
     setReportPreview(null)
     setDownloadToken(null)
+    setAiStatus('cerebras')
     setVersion(0)
     setRefinementHistory([])
     setRefinementCount(0)
@@ -100,6 +102,7 @@ export default function App() {
 
   const handleAnalyzeStart = () => {
     setProgressStep(1)
+    setAiStatus('cerebras')
     setAnalysing(true)
   }
 
@@ -109,6 +112,7 @@ export default function App() {
     setTimeout(() => {
       setReportPreview(data.preview)
       setDownloadToken(data.download_token)
+      setAiStatus(data.ai_status || 'cerebras')
       setVersion(data.version)
       setRefinementHistory([
         { role: 'user', content: instruction },
@@ -133,6 +137,7 @@ export default function App() {
       const data = await refineReport({ session_id: sessionId, feedback, history: priorHistory, current_version: version })
       setReportPreview(data.preview)
       setDownloadToken(data.download_token)
+      setAiStatus(data.ai_status || 'cerebras')
       setVersion(data.version)
       setRefinementHistory((prev) => [...prev, { role: 'assistant', content: summariseActionPlan(data.action_plan) }])
       setRefinementCount((count) => count + 1)
@@ -207,6 +212,7 @@ export default function App() {
           <div className="flex flex-col gap-8 py-8">
             {showReport ? (
               <Suspense fallback={<Spinner />}>
+                {aiStatus === 'fallback' ? <FallbackBanner /> : null}
                 <PreviewPanel
                   preview={reportPreview}
                   downloadToken={downloadToken}
@@ -225,7 +231,7 @@ export default function App() {
             ) : (
               <>
                 {analysing ? (
-                  <ProgressIndicator currentStep={progressStep} rowCount={dataStats.rowCount} sheetCount={dataStats.sheetCount} />
+                  <ProgressIndicator currentStep={progressStep} rowCount={dataStats.rowCount} sheetCount={dataStats.sheetCount} aiStatus={aiStatus} />
                 ) : null}
                 <div className={analysing ? 'hidden' : 'flex flex-col gap-8'}>
                   <DataPreview preview={preview} intelligenceBrief={intelligenceBrief} />

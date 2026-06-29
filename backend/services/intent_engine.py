@@ -17,6 +17,7 @@ normalized so it always satisfies the validation rules in
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from cerebras.cloud.sdk import Cerebras
@@ -27,13 +28,32 @@ from schemas.cerebras_schema import (
     ActionPlan,
     FormattingTier,
     IntentType,
+    Operation,
     OperationType,
     OutputSheet,
 )
 
+log = logging.getLogger("excelgpt.intent")
+
 
 class IntentEngineError(Exception):
     """Raised when the AI intent layer cannot produce a valid action plan."""
+
+
+# Keyword → compact operation description, scanned in order. Used to compress a
+# long instruction (Tier 2) and to detect requested analyses (Tier 3 fallback).
+# Each entry: (list of trigger keywords, predicate-needs-all, compact form).
+_COMPRESSION_RULES: tuple[tuple[tuple[str, ...], bool, str], ...] = (
+    (("executive", "dashboard", "kpi"), False, "executive summary with KPI cards"),
+    (("region",), False, "rank regions by deposits with attainment vs target"),
+    (("state",), False, "rank states by deposits with attainment and variance"),
+    (("cluster head",), False, "rank cluster heads by deposits with performance tier"),
+    (("fso leaderboard", "rank all fso"), False, "rank FSOs by deposits with attainment percentage and performance tier"),
+    (("fso", "rank"), True, "rank FSOs by deposits with attainment percentage and performance tier"),
+    (("daily", "trend", "day"), False, "daily trend of deposits with day-on-day growth"),
+    (("underperform", "below target", "below 70"), False, "list FSOs below 70% attainment sorted by variance"),
+    (("top perform", "above target", "above 110"), False, "list FSOs above 110% attainment sorted by deposits"),
+)
 
 
 # Canonical workbook order for output sheets, used when normalizing the plan.
@@ -175,24 +195,235 @@ class IntentEngine:
     # -- public API ---------------------------------------------------------
 
     def classify(self, intelligence_brief: dict[str, Any], instruction: str) -> ActionPlan:
-        """Turn an instruction + data brief into a validated ActionPlan."""
+        """Turn an instruction + data brief into a validated ActionPlan.
+
+        Always returns a plan — see :meth:`classify_with_status` for the 3-tier
+        fallback that guarantees this never raises for a non-empty instruction.
+        """
+        plan, _status = self.classify_with_status(intelligence_brief, instruction)
+        return plan
+
+    def classify_with_status(
+        self, intelligence_brief: dict[str, Any], instruction: str
+    ) -> tuple[ActionPlan, str]:
+        """3-tier planner. Returns (plan, ai_status) where ai_status is one of
+        "cerebras" (Tier 1/2 succeeded) or "fallback" (Tier 3 rule-based).
+
+        The user must ALWAYS get a result: even a 200-word instruction that times
+        out twice falls through to the deterministic rule-based planner, which
+        never calls the network and never fails.
+        """
         instruction = (instruction or "").strip()
         if not instruction:
             raise IntentEngineError("Instruction is empty.")
 
-        user_message = self._build_user_message(intelligence_brief, instruction)
+        # TIER 1 — full instruction to Cerebras (highest fidelity).
+        try:
+            return self._plan_from_cerebras(intelligence_brief, instruction), "cerebras"
+        except IntentEngineError as e1:
+            log.warning("Tier 1 (full instruction) failed: %s. Trying Tier 2 (compressed).", e1)
 
-        # Reasoning models occasionally truncate or wrap their JSON; retry once
-        # before giving up so a single bad generation doesn't fail the request.
-        last_error: IntentEngineError | None = None
-        for _ in range(2):
-            raw = self._call_cerebras(user_message)
-            try:
-                data = self._parse_json(raw)
-                return self._normalize(data)
-            except IntentEngineError as exc:
-                last_error = exc
-        raise last_error or IntentEngineError("Cerebras did not return a valid action plan.")
+        # TIER 2 — compressed summary (<60 words) to Cerebras.
+        try:
+            compressed = self._compress_instruction(instruction)
+            return self._plan_from_cerebras(intelligence_brief, compressed), "cerebras"
+        except IntentEngineError as e2:
+            log.warning("Tier 2 (compressed) failed: %s. Activating rule-based fallback.", e2)
+
+        # TIER 3 — rule-based fallback. No network, no validation risk, never fails.
+        return self._rule_based_fallback(intelligence_brief, instruction), "fallback"
+
+    def _plan_from_cerebras(self, intelligence_brief: dict[str, Any], instruction_text: str) -> ActionPlan:
+        """One Cerebras attempt: build the message, call, parse, normalize."""
+        user_message = self._build_user_message(intelligence_brief, instruction_text)
+        raw = self._call_cerebras(user_message)
+        data = self._parse_json(raw)
+        return self._normalize(data)
+
+    # -- instruction compression (Tier 2) -----------------------------------
+
+    def _detect_operations(self, instruction: str) -> list[str]:
+        """Scan the instruction for known analysis keywords and return the
+        matching compact operation descriptions, de-duplicated, in priority order."""
+        text = (instruction or "").lower()
+        found: list[str] = []
+        for keywords, needs_all, compact in _COMPRESSION_RULES:
+            hit = all(k in text for k in keywords) if needs_all else any(k in text for k in keywords)
+            if hit and compact not in found:
+                found.append(compact)
+        return found
+
+    def _compress_instruction(self, instruction: str) -> str:
+        """Reduce a long instruction to its core operations, kept short.
+
+        Maps detected keywords to compact operation descriptions and joins them.
+        If nothing matches, falls back to the first ~50 words of the original so
+        Tier 2 still has something meaningful to send.
+        """
+        ops = self._detect_operations(instruction)
+        if not ops:
+            return " ".join((instruction or "").split()[:50])
+        compressed = "Analyse this sales data: " + "; ".join(ops)
+        words = compressed.split()
+        if len(words) > 75:  # hard ceiling well under the diagnostic's 80-word check
+            compressed = " ".join(words[:75])
+        return compressed
+
+    def _minimal_instruction(self, instruction: str) -> str:
+        """Ultra-compressed — just the top 3 detected operations as one sentence."""
+        ops = self._detect_operations(instruction)
+        top3 = ops[:3]
+        if not top3:
+            return "Show me: " + " ".join((instruction or "").split()[:20])
+        return "Show me: " + ", ".join(top3)
+
+    # -- rule-based fallback (Tier 3) ---------------------------------------
+
+    def _rule_based_fallback(self, brief: dict[str, Any], instruction: str) -> ActionPlan:
+        """Build a complete ActionPlan using only Python keyword detection.
+
+        No AI. No API call. Always works in well under 1ms. This is the safety
+        net that must NEVER fail.
+        """
+        # Step 1 — sheet names from the brief.
+        sheets = [s.get("name") for s in brief.get("sheets", []) or [] if s.get("name")]
+        first_sheet = sheets[0] if sheets else "Sheet1"
+
+        # Step 2 — available columns from the brief.
+        all_columns: list[str] = []
+        for sheet in brief.get("sheets", []) or []:
+            for col in sheet.get("column_summary", []) or []:
+                name = col.get("name")
+                if name:
+                    all_columns.append(name)
+
+        def low(c: str) -> str:
+            return str(c).lower()
+
+        entity_cols = [c for c in all_columns if any(
+            k in low(c) for k in ["fso name", "name", "branch", "agent", "staff", "officer"])]
+        region_col = next((c for c in all_columns if "region" in low(c)), None)
+        state_col = next((c for c in all_columns if "state" in low(c)), None)
+        cluster_col = next((c for c in all_columns if "cluster" in low(c) and "head" in low(c)), None)
+
+        value_cols = [c for c in all_columns if any(
+            k in low(c) for k in ["deposit", "revenue", "amount", "sales", "collection"])]
+        primary_value = value_cols[0] if value_cols else (all_columns[-1] if all_columns else None)
+
+        count_cols = [c for c in all_columns if any(
+            k in low(c) for k in ["account", "count", "number", "qty", "quantity", "opened"])]
+        primary_count = count_cols[0] if count_cols else None
+
+        target_cols = [c for c in all_columns if any(
+            k in low(c) for k in ["target", "budget", "plan", "quota"])]
+
+        date_cols = [c for c in all_columns if any(
+            k in low(c) for k in ["date", "day", "month", "period", "week"])]
+        date_col = date_cols[0] if date_cols else None
+
+        # Step 3 — parse the instruction for requested analyses.
+        instr = (instruction or "").lower()
+        want_executive = any(k in instr for k in ["executive", "dashboard", "kpi", "summary", "national"])
+        want_region = any(k in instr for k in ["region", "geopolitical", "zone"])
+        want_state = "state" in instr
+        want_cluster = any(k in instr for k in ["cluster head", "cluster"])
+        want_fso_rank = any(k in instr for k in ["fso", "field sales", "officer", "leaderboard", "rank all"])
+        want_daily = any(k in instr for k in ["daily", "trend", "day", "june"])
+        want_underperform = any(k in instr for k in ["underperform", "below target", "below 70", "watchlist", "behind"])
+        want_topperform = any(k in instr for k in ["top perform", "above target", "above 110", "recognition", "overachiev"])
+
+        # Step 4 — build operations.
+        operations: list[Operation] = []
+        op_num = 1
+
+        def value_targets() -> list[str]:
+            cols = [primary_value] if primary_value else []
+            if primary_count:
+                cols.append(primary_count)
+            return cols
+
+        if entity_cols and primary_value:
+            primary_entity = entity_cols[0]
+
+            if want_fso_rank or want_executive:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="rank", target_sheet=first_sheet,
+                    target_columns=value_targets(), group_by=[primary_entity],
+                    parameters={"by": primary_value, "order": "desc", "top_n": 50, "include_all": True},
+                    output_sheet="data", output_label=f"FSO Leaderboard — Ranked by {primary_value}"))
+                op_num += 1
+
+            if want_region and region_col:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
+                    target_columns=value_targets(), group_by=[region_col], parameters={},
+                    output_sheet="analysis", output_label="Regional Performance Summary"))
+                op_num += 1
+
+            if want_state and state_col:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
+                    target_columns=value_targets(), group_by=[state_col], parameters={},
+                    output_sheet="analysis", output_label="State Performance Summary"))
+                op_num += 1
+
+            if want_cluster and cluster_col:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
+                    target_columns=value_targets(), group_by=[cluster_col], parameters={},
+                    output_sheet="analysis", output_label="Cluster Head Performance"))
+                op_num += 1
+
+            if want_daily and date_col:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="growth_rate", target_sheet=first_sheet,
+                    target_columns=[primary_value], group_by=[date_col], parameters={},
+                    output_sheet="analysis", output_label="Daily Trend — Deposits with Growth Rate"))
+                op_num += 1
+
+            if (want_underperform or want_topperform) and target_cols:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="variance", target_sheet=first_sheet,
+                    target_columns=[primary_value], group_by=[primary_entity],
+                    parameters={"target_column": target_cols[0], "include_all": True},
+                    output_sheet="analysis", output_label="Attainment vs Target — All FSOs"))
+                op_num += 1
+
+            # Always visualise the primary ranking.
+            operations.append(Operation(
+                operation_id=f"op_{op_num}", operation_type="chart", target_sheet=first_sheet,
+                target_columns=[primary_value], group_by=[primary_entity],
+                parameters={"chart_type": "bar", "top_n": 10, "x": primary_entity, "y": primary_value},
+                output_sheet="charts", output_label=f"Top 10 by {primary_value}"))
+            op_num += 1
+
+        # Step 5 — safe default when nothing was detected.
+        if not operations:
+            operations.append(Operation(
+                operation_id="op_1", operation_type="rank", target_sheet=first_sheet,
+                target_columns=[all_columns[-1]] if all_columns else [],
+                group_by=[all_columns[0]] if all_columns else [],
+                parameters={"top_n": 20}, output_sheet="data", output_label="Performance Ranking"))
+
+        # Step 6 — output sheets implied by the operations (executive first).
+        output_sheets = list(dict.fromkeys(
+            ["executive_summary"] + [op.output_sheet for op in operations]))
+
+        # Step 7 — assemble the plan.
+        return ActionPlan(
+            intent_type="aggregation",
+            clarification_needed=False,
+            clarification_question=None,
+            operations=operations,
+            output_sheets_required=output_sheets,
+            formatting_tier="executive",
+            nigerian_context={
+                "currency": "NGN",
+                "template_type": "sales",
+                "fiscal_calendar": "january",
+                "lga_analysis": False,
+            },
+        )
 
     # -- prompt construction ------------------------------------------------
 

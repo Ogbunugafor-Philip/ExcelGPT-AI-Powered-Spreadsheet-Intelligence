@@ -78,15 +78,27 @@ def client():
 
 
 def _set_plans(monkeypatch, *plans):
-    """Make intent_engine.classify return the given plans in order, repeating the last."""
+    """Make the intent engine return the given plans in order, repeating the last.
+
+    The /analyse and /refine endpoints call ``classify_with_status``; patch that
+    (and ``classify``, for any other caller) to return each plan with a
+    "cerebras" status so the 3-tier fallback never reaches the network in tests.
+    """
     calls = {"n": 0}
 
-    def fake_classify(_brief, _instruction):
+    def _next_plan():
         index = min(calls["n"], len(plans) - 1)
         calls["n"] += 1
         return plans[index]
 
+    def fake_classify(_brief, _instruction):
+        return _next_plan()
+
+    def fake_classify_with_status(_brief, _instruction):
+        return _next_plan(), "cerebras"
+
     monkeypatch.setattr(main.intent_engine, "classify", fake_classify)
+    monkeypatch.setattr(main.intent_engine, "classify_with_status", fake_classify_with_status)
 
 
 def _analyse(client, session_id, instruction="Top 5 branches by deposit volume"):

@@ -1,5 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Loader2, Info } from 'lucide-react'
+
+// Subtle amber notice shown when the AI planner fell back to rule-based analysis.
+// Honest about what happened without alarming the user.
+export function FallbackBanner() {
+  return (
+    <div
+      role="status"
+      className="mb-4 flex items-start gap-3 rounded-xl border border-amber/30 bg-amber/10 px-4 py-3 text-small text-amber"
+    >
+      <Info className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>
+        AI planning timed out — used smart rule-based analysis instead. Results may differ from your exact wording.
+      </p>
+    </div>
+  )
+}
 
 // Four-step pipeline stepper with contextual, rotating loading messages.
 // Horizontal on desktop, vertical stack on mobile.
@@ -42,7 +58,7 @@ const STEPS = [
   },
 ]
 
-export default function ProgressIndicator({ currentStep = 1, rowCount, sheetCount }) {
+export default function ProgressIndicator({ currentStep = 1, rowCount, sheetCount, aiStatus }) {
   const activeIndex = Math.min(Math.max(currentStep, 1), STEPS.length) - 1
   const [messageIndex, setMessageIndex] = useState(0)
 
@@ -58,6 +74,7 @@ export default function ProgressIndicator({ currentStep = 1, rowCount, sheetCoun
 
   return (
     <section className="eg-card p-6 lg:p-8" aria-label="Processing">
+      {aiStatus === 'fallback' ? <FallbackBanner /> : null}
       <ol className="flex flex-col gap-6 md:flex-row md:items-start md:gap-0">
         {STEPS.map((step, index) => {
           const status = index < activeIndex ? 'complete' : index === activeIndex ? 'active' : 'pending'

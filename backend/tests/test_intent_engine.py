@@ -156,10 +156,16 @@ def test_json_inside_code_fence_is_parsed():
     assert plan.intent_type == "formatting_only"
 
 
-def test_invalid_json_raises_intent_engine_error():
+def test_invalid_json_falls_back_to_rule_based_plan():
+    """When Cerebras never returns valid JSON, the 3-tier system must still
+    return a usable plan via the deterministic rule-based fallback (Tier 3)."""
     engine = _engine_returning("Sorry, I cannot help with that.")
-    with pytest.raises(IntentEngineError):
-        engine.classify(BRIEF, "anything")
+    plan, status = engine.classify_with_status(BRIEF, "rank branches by deposits")
+    assert isinstance(plan, ActionPlan)
+    assert status == "fallback"
+    assert plan.operations  # never empty
+    # classify() mirrors classify_with_status and also never raises here.
+    assert isinstance(engine.classify(BRIEF, "rank branches by deposits"), ActionPlan)
 
 
 def test_missing_api_key_raises_on_client_access():

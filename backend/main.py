@@ -159,8 +159,9 @@ async def analyse(payload: AnalyseRequest) -> AnalyseResponse:
     started = time.perf_counter()
 
     try:
-        action_plan = intent_engine.classify(intelligence_brief, payload.instruction)
+        action_plan, ai_status = intent_engine.classify_with_status(intelligence_brief, payload.instruction)
     except IntentEngineError as exc:
+        # With the 3-tier fallback this should only fire for an empty instruction.
         log_error("/analyse", "IntentEngineError", str(exc), payload.session_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -173,6 +174,7 @@ async def analyse(payload: AnalyseRequest) -> AnalyseResponse:
             preview=ReportPreview(),
             download_token=None,
             version=int(session.get("version", 0)),
+            ai_status=ai_status,
         )
 
     version = int(session.get("version", 0)) + 1
@@ -185,6 +187,7 @@ async def analyse(payload: AnalyseRequest) -> AnalyseResponse:
         preview=_build_preview(computation_output),
         download_token=download_token,
         version=version,
+        ai_status=ai_status,
     )
 
 
@@ -527,7 +530,7 @@ async def refine(payload: RefineRequest) -> RefineResponse:
     refinement_context = _build_refinement_context(payload.history, payload.feedback)
 
     try:
-        action_plan = intent_engine.classify(intelligence_brief, refinement_context)
+        action_plan, ai_status = intent_engine.classify_with_status(intelligence_brief, refinement_context)
     except IntentEngineError as exc:
         log_error("/refine", "IntentEngineError", str(exc), payload.session_id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -539,6 +542,7 @@ async def refine(payload: RefineRequest) -> RefineResponse:
             preview=ReportPreview(),
             download_token=None,
             version=int(session.get("version", payload.current_version)),
+            ai_status=ai_status,
         )
 
     version = int(session.get("version", payload.current_version)) + 1
@@ -550,6 +554,7 @@ async def refine(payload: RefineRequest) -> RefineResponse:
         preview=_build_preview(computation_output),
         download_token=download_token,
         version=version,
+        ai_status=ai_status,
     )
 
 

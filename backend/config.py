@@ -18,11 +18,16 @@ load_dotenv(override=True)
 # ---------------------------------------------------------------------------
 CEREBRAS_API_KEY: str = os.getenv("CEREBRAS_API_KEY", "")
 CEREBRAS_MODEL: str = os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")
-CEREBRAS_TIMEOUT_SECONDS: float = float(os.getenv("CEREBRAS_TIMEOUT_SECONDS", "20"))
+# Tier-1 generous budget so a long, complex instruction does not time out.
+# CEREBRAS_TIMEOUT is the documented alias; CEREBRAS_TIMEOUT_SECONDS is what the
+# client actually uses (either may be set in .env).
+CEREBRAS_TIMEOUT_SECONDS: float = float(
+    os.getenv("CEREBRAS_TIMEOUT_SECONDS") or os.getenv("CEREBRAS_TIMEOUT") or "90"
+)
 CEREBRAS_TEMPERATURE: float = float(os.getenv("CEREBRAS_TEMPERATURE", "0.1"))
 # Reasoning models (e.g. gpt-oss-120b) spend tokens on hidden reasoning before
 # emitting the JSON, so the budget must comfortably exceed the plan size.
-CEREBRAS_MAX_TOKENS: int = int(os.getenv("CEREBRAS_MAX_TOKENS", "4000"))
+CEREBRAS_MAX_TOKENS: int = int(os.getenv("CEREBRAS_MAX_TOKENS", "8000"))
 ALLOWED_ORIGINS: list[str] = [
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")

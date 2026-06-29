@@ -184,6 +184,9 @@ class AnalyseResponse(BaseModel):
     preview: ReportPreview
     download_token: Optional[str] = None
     version: int = 1
+    # "cerebras" when the AI planner produced the plan (Tier 1/2); "fallback"
+    # when the deterministic rule-based planner (Tier 3) was used.
+    ai_status: Literal["cerebras", "fallback"] = "cerebras"
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +206,7 @@ class RefineResponse(BaseModel):
     preview: ReportPreview
     download_token: Optional[str] = None
     version: int
+    ai_status: Literal["cerebras", "fallback"] = "cerebras"
 
 
 # ---------------------------------------------------------------------------
