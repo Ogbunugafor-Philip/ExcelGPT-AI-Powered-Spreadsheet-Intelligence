@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os  # noqa: E402
 from pathlib import Path
 from typing import Any
 
 import matplotlib
 
-matplotlib.use("Agg")  # headless rendering — no display needed on the server.
+matplotlib.use("Agg")  # headless rendering — MUST be set before pyplot is imported.
 
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
@@ -55,21 +56,27 @@ class ChartGenerator:
         result["x_label"] = x_label
         result["y_label"] = y_label
 
-        charts_dir = Path(output_dir).resolve()
-        charts_dir.mkdir(parents=True, exist_ok=True)
-        image_path = (charts_dir / f"{operation.operation_id}.png").resolve()
+        output_dir = os.path.abspath(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        image_path = os.path.join(output_dir, f"{operation.operation_id}.png")
 
         try:
-            recharts = self._render(chart_type, df, x_col, y_col, result["title"], str(image_path), x_label, y_label)
-            # Verify the PNG actually landed before handing the path downstream.
-            assert image_path.exists(), f"chart PNG was not written: {image_path}"
-            print(f"Chart saved: {image_path} ({image_path.stat().st_size} bytes)")
-            result["image_path"] = str(image_path)  # absolute path for openpyxl embedding
+            diverging = bool(params.get("diverging"))
+            recharts = self._render(chart_type, df, x_col, y_col, result["title"], image_path,
+                                    x_label, y_label, diverging=diverging)
+            # Verify the PNG actually landed, and is not an empty/blank file.
+            if not os.path.exists(image_path):
+                raise RuntimeError(f"Chart file was not created: {image_path}")
+            file_size = os.path.getsize(image_path)
+            if file_size < 1000:
+                raise RuntimeError(f"Chart file too small ({file_size} bytes), likely empty: {image_path}")
+            print(f"[chart_generator] Saved chart: {image_path} ({file_size:,} bytes)")
+            result["image_path"] = image_path  # absolute path for openpyxl embedding
             result["recharts_data"] = recharts
         except Exception as exc:  # noqa: BLE001 — a chart failure must not abort the report
             plt.close("all")
             result["warnings"].append(f"Chart rendering failed: {exc}")
-            print(f"Chart FAILED for {operation.operation_id}: {exc}")
+            print(f"[chart_generator] FAILED for {operation.operation_id}: {exc}")
         return result
 
     # -- axis resolution ----------------------------------------------------
@@ -97,7 +104,7 @@ class ChartGenerator:
         frame = frame.sort_values("y", ascending=False).head(limit)
         return frame
 
-    def _render(self, chart_type, df, x_col, y_col, title, image_path, x_label="", y_label="") -> list[dict[str, Any]]:
+    def _render(self, chart_type, df, x_col, y_col, title, image_path, x_label="", y_label="", diverging=False) -> list[dict[str, Any]]:
         fig, ax = plt.subplots(figsize=(8, 4.5))
         fig.patch.set_facecolor(PALETTE["navy"])
         ax.set_facecolor(PALETTE["navy"])
@@ -116,11 +123,11 @@ class ChartGenerator:
         elif chart_type == "scatter":
             recharts = self._scatter(ax, df, x_col, y_col, x_label, y_label)
         else:
-            recharts = self._bar(ax, df, x_col, y_col, x_label, y_label)
+            recharts = self._bar(ax, df, x_col, y_col, x_label, y_label, diverging=diverging)
 
         fig.tight_layout()
-        fig.savefig(image_path, dpi=130, facecolor=fig.get_facecolor())
-        plt.close(fig)
+        fig.savefig(image_path, dpi=150, bbox_inches="tight", facecolor=PALETTE["navy"])
+        plt.close("all")
         return recharts
 
     @staticmethod
@@ -146,10 +153,15 @@ class ChartGenerator:
             "categoryName": x_label or "Category",
         }
 
-    def _bar(self, ax, df, x_col, y_col, x_label="", y_label=""):
+    def _bar(self, ax, df, x_col, y_col, x_label="", y_label="", diverging=False):
         # Rankings read best as HORIZONTAL bars — entity names sit on the Y axis.
         frame = self._prepare_xy(df, x_col, y_col).sort_values("y")
-        colors = self._rank_colors(list(frame["y"]))
+        if diverging:
+            # Variance charts: positive bars green, negative bars red.
+            colors = [PALETTE["emerald"] if v >= 0 else PALETTE["red_alert"] for v in frame["y"]]
+            ax.axvline(0, color=PALETTE["text_secondary"], linewidth=0.8)
+        else:
+            colors = self._rank_colors(list(frame["y"]))
         ax.barh(frame["x"], frame["y"], color=colors)
         ax.set_xlabel(y_label or y_col)
         for index, value in enumerate(frame["y"]):

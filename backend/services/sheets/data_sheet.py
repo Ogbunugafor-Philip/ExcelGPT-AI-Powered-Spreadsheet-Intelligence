@@ -95,6 +95,19 @@ class DataSheet:
                          align=S.CENTER, border=border)
             return
 
+        # Status columns: green fill for "Above Target", red for "Below Target".
+        if "status" in str(col_name).lower() and isinstance(value, str):
+            low = value.lower()
+            if "above" in low or "over" in low:
+                fill_c, text_c = S.POSITIVE_BG, S.POSITIVE_TEXT
+            elif "below" in low or "under" in low:
+                fill_c, text_c = S.NEGATIVE_BG, S.NEGATIVE_TEXT
+            else:
+                fill_c, text_c = bg, S.TEXT_DARK
+            S.style_cell(cell, value=value, font_=S.font(10, bold=True, color=text_c), fill_=S.fill(fill_c),
+                         align=S.CENTER, border=border)
+            return
+
         number_format = None
         if col_type == "currency":
             cell.value = self._num(value)

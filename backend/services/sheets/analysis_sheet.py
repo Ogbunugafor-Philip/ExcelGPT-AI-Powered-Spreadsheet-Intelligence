@@ -14,6 +14,31 @@ from . import styles as S
 MEDALS = {1: S.GOLD_BG, 2: "ECEFF4", 3: "F3E5D8"}
 SECTION_SPAN = 8
 
+# Raw computation keys -> human-readable display headers (PROBLEM 1).
+_HUMAN_HEADERS = {
+    "variance_pct": "Variance %",
+    "variance_amount": "Variance (₦)",
+    "growth_pct": "Growth Rate",
+    "growth_rate": "Growth Rate",
+    "status": "Status",
+    "direction": "Trend",
+    "period": "Period",
+    "deposits_ngn": "Deposits (₦)",
+    "rank": "Rank",
+}
+
+
+def humanize_header(col: Any) -> str:
+    """variance_pct -> Variance %, status -> Status; leave already-display names
+    (those carrying symbols / spaces) untouched; otherwise Title-Case + spaces."""
+    key = str(col)
+    mapped = _HUMAN_HEADERS.get(key.lower())
+    if mapped:
+        return mapped
+    if any(ch in key for ch in ("→", "(", "%", "₦", " ")):
+        return key
+    return key.replace("_", " ").title()
+
 
 class AnalysisSheet:
     def build(self, ws, analysis: dict[str, Any]) -> None:
@@ -92,7 +117,7 @@ class AnalysisSheet:
     def _growth(self, ws, growth_table, row):
         if not growth_table:
             return row
-        is_variance = any("Variance" in str(k) for k in growth_table[0].keys())
+        is_variance = any("variance" in str(k).lower() for k in growth_table[0].keys())
         row = self._section_header(ws, "VARIANCE ANALYSIS" if is_variance else "GROWTH ANALYSIS", row)
         columns = [c for c in growth_table[0].keys() if c != "direction"]
         row = self._table_header(ws, columns, row)
@@ -138,7 +163,7 @@ class AnalysisSheet:
     def _table_header(self, ws, columns, row):
         border = S.header_border()
         for c_index, col in enumerate(columns, start=1):
-            S.style_cell(ws.cell(row=row, column=c_index), value=str(col),
+            S.style_cell(ws.cell(row=row, column=c_index), value=humanize_header(col),
                          font_=S.font(10, bold=True, color=S.HEADER_FONT), fill_=S.fill(S.HEADER_BG),
                          align=S.CENTER, border=border)
         ws.row_dimensions[row].height = 18

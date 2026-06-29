@@ -123,9 +123,9 @@ class OutputPackager:
         for result in results:
             by_type.setdefault(result.get("operation_type", ""), []).append(result)
 
-        executive_summary = self._executive_summary(instruction, filename, results, sheets)
-        data_sheet = self._data_sheet(results, sheets)
-        analysis_sheet = self._analysis_sheet(results)
+        executive_summary = self._executive_summary(action_plan, instruction, filename, results, sheets)
+        data_sheet = self._data_sheet(action_plan, results, sheets)
+        analysis_sheet = self._analysis_sheet(action_plan, results)
         charts = self._charts(results)
         forecast_sheet = self._forecast_sheet(by_type.get("forecast", []))
         display_names = self._display_names(session, results, sheets, data_sheet)
@@ -173,7 +173,7 @@ class OutputPackager:
 
     # -- executive summary --------------------------------------------------
 
-    def _executive_summary(self, instruction, filename, results, sheets):
+    def _executive_summary(self, action_plan, instruction, filename, results, sheets):
         title = self._title(instruction)
         period = self._detect_period(results, sheets)
         rows_total = sum(int(df.shape[0]) for df in sheets.values()) if sheets else 0
@@ -182,13 +182,92 @@ class OutputPackager:
             title=title,
             period=period,
             data_source=data_source,
-            kpi_cards=self._kpi_cards(results),
+            kpi_cards=self._kpi_cards(action_plan, results),
         )
 
     def _title(self, instruction: str) -> str:
         return title_from_instruction(instruction)
 
-    def _kpi_cards(self, results) -> list[KpiCard]:
+    # -- rank + variance combo (top-N branches vs target) -------------------
+
+    @staticmethod
+    def _plural(word: str, n: int) -> str:
+        """Pluralise an entity noun correctly: Branch -> Branches, Zone -> Zones."""
+        if n == 1:
+            return word
+        lowered = word.lower()
+        if lowered.endswith("y") and not lowered.endswith(("ay", "ey", "oy", "uy")):
+            return word[:-1] + "ies"
+        if lowered.endswith(("s", "x", "z", "ch", "sh")):
+            return word + "es"
+        return word + "s"
+
+    def _top_variance(self, action_plan, results):
+        """For a 'top-N by metric + variance vs target' question, compute the
+        per-branch variance for exactly the ranked top-N branches.
+
+        Returns (records, meta) or None when this is not that kind of question.
+        """
+        if action_plan is None:
+            return None
+        rank_op = next((op for op in action_plan.operations if op.operation_type == "rank"), None)
+        var_op = next((op for op in action_plan.operations if op.operation_type == "variance"), None)
+        if rank_op is None or var_op is None:
+            return None
+        rank = next((r for r in results if r.get("operation_type") == "rank" and r.get("rows")), None)
+        if rank is None:
+            return None
+
+        cols = rank.get("columns", [])
+        rows = rank.get("rows", [])
+        ranked_by = rank.get("ranked_by")
+        if ranked_by not in cols or not rows:
+            return None
+
+        target_col = var_op.parameters.get("target_column") or var_op.parameters.get("target")
+        if target_col not in cols:
+            target_col = next((c for c in cols if str(c).lower() in ("target", "budget", "goal", "plan")), None)
+        if target_col not in cols:
+            return None
+
+        dep_i = cols.index(ranked_by)
+        tgt_i = cols.index(target_col)
+        rank_i = cols.index("Rank") if "Rank" in cols else None
+        ent_i = next((i for i, c in enumerate(cols)
+                      if c not in ("Rank", ranked_by, target_col) and isinstance(rows[0][i], str)), None)
+        zone_i = next((i for i, c in enumerate(cols) if str(c).lower() == "zone"), None)
+
+        records = []
+        for idx, row in enumerate(rows, start=1):
+            dep = to_jsonable(row[dep_i])
+            tgt = to_jsonable(row[tgt_i])
+            numeric = isinstance(dep, (int, float)) and isinstance(tgt, (int, float))
+            var = round(dep - tgt, 2) if numeric else None
+            vpct = round((dep - tgt) / tgt * 100.0, 2) if numeric and tgt else None
+            status = "Above Target" if (var or 0) > 0 else "Below Target" if (var or 0) < 0 else "On Target"
+            records.append({
+                "rank": to_jsonable(row[rank_i]) if rank_i is not None else idx,
+                "branch": row[ent_i] if ent_i is not None else None,
+                "zone": row[zone_i] if zone_i is not None else None,
+                "deposits": dep, "target": tgt, "variance": var, "variance_pct": vpct, "status": status,
+                "direction": "up" if (var or 0) > 0 else "down" if (var or 0) < 0 else "neutral",
+            })
+        meta = {
+            "ranked_by": ranked_by,
+            "metric_label": self._pretty(ranked_by),
+            "target_col": target_col,
+            "has_zone": zone_i is not None,
+            "is_currency": ranked_by in set(rank.get("currency_columns", [])) or is_currency_column(ranked_by),
+            "top_n": rank_op.parameters.get("top_n") or len(records),
+            "entity_label": self._pretty(cols[ent_i]) if ent_i is not None else "Branch",
+        }
+        return records, meta
+
+    def _kpi_cards(self, action_plan, results) -> list[KpiCard]:
+        combo = self._top_variance(action_plan, results)
+        if combo:
+            return self._kpi_from_combo(*combo)
+
         # Lead with the cards that match the question's primary intent so the
         # Executive Summary opens on growth KPIs for a growth question, etc.
         ordered = sorted(results, key=lambda r: self._kpi_priority(r.get("operation_type")))
@@ -251,9 +330,9 @@ class OutputPackager:
                          change=money(rows[0][metric_idx]) if metric_idx is not None else "", direction="up")]
         if total is not None:
             cards.append(KpiCard(label=f"Total {self._pretty(ranked_by)}", value=money(total),
-                                 change=f"{len(values)} {entity_label.lower()}s", direction="neutral"))
+                                 change=f"{len(values)} {self._plural(entity_label, len(values)).lower()}", direction="neutral"))
             cards.append(KpiCard(label=f"Average per {entity_label}", value=money(average), change="", direction="neutral"))
-        cards.append(KpiCard(label=f"Number of {entity_label}s", value=f"{len(rows):,}", change="", direction="neutral"))
+        cards.append(KpiCard(label=f"Number of {self._plural(entity_label, len(rows))}", value=f"{len(rows):,}", change="", direction="neutral"))
         return cards
 
     def _kpi_from_growth(self, result) -> list[KpiCard]:
@@ -327,14 +406,59 @@ class OutputPackager:
             direction="up" if avg > 0 else "down" if avg < 0 else "neutral",
         )]
 
+    def _kpi_from_combo(self, records, meta) -> list[KpiCard]:
+        """The 4 KPI cards that directly answer a top-N + variance question."""
+        from statistics import mean
+
+        entity = meta["entity_label"]
+        metric = meta["metric_label"]
+        is_currency = meta["is_currency"]
+        top_n = meta["top_n"]
+        above = [r for r in records if r["variance"] is not None and r["variance"] > 0]
+        below = [r for r in records if r["variance"] is not None and r["variance"] < 0]
+        top = records[0] if records else {}
+        total_dep = sum(r["deposits"] for r in records if isinstance(r["deposits"], (int, float)))
+        total_tgt = sum(r["target"] for r in records if isinstance(r["target"], (int, float)))
+
+        def avg_pct(group):
+            vals = [r["variance_pct"] for r in group if r["variance_pct"] is not None]
+            return mean(vals) if vals else None
+
+        aa, ab = avg_pct(above), avg_pct(below)
+
+        def money(v, compact=False):
+            if not isinstance(v, (int, float)):
+                return "—"
+            if not is_currency:
+                return f"{v:,.0f}"
+            return format_naira(v, compact=True) if compact else self._naira0(v)
+
+        return [
+            KpiCard(label=f"Top {entity}", value=str(top.get("branch") or "—"),
+                    change=money(top.get("deposits")), direction="up"),
+            KpiCard(label="Above Target", value=f"{len(above)} {self._plural(entity, len(above))}",
+                    change=f"avg {format_pct(aa, signed=True)}" if aa is not None else "", direction="up"),
+            KpiCard(label="Below Target", value=f"{len(below)} {self._plural(entity, len(below))}",
+                    change=f"avg {format_pct(ab, signed=True)}" if ab is not None else "",
+                    direction="down" if below else "neutral"),
+            KpiCard(label=f"Total {metric} (Top {top_n})", value=money(total_dep, compact=True),
+                    change=f"vs {money(total_tgt, compact=True)} target",
+                    direction="up" if total_dep >= total_tgt else "down"),
+        ]
+
     # -- data sheet ---------------------------------------------------------
 
-    def _data_sheet(self, results, sheets) -> DataSheet:
+    def _data_sheet(self, action_plan, results, sheets) -> DataSheet:
         """The Data sheet shows the PRIMARY result of what was actually asked.
 
-        Priority (FIX 1): growth table → variance table → rankings → grouped
-        aggregation → raw rows as a last resort.
+        Priority: top-N + variance combo → growth table → variance table →
+        rankings → grouped aggregation → raw rows as a last resort.
         """
+        combo = self._top_variance(action_plan, results)
+        if combo:
+            columns, rows = self._combo_data_sheet(*combo)
+            return DataSheet(columns=columns, rows=rows, conditional_formatting=self._conditional_formatting(columns))
+
         growth = next((r for r in results if r.get("operation_type") == "growth_rate" and r.get("wide_growth")), None)
         variance = next((r for r in results if r.get("operation_type") == "variance" and r.get("variance_table")), None)
         rank = next((r for r in results if r.get("operation_type") == "rank" and r.get("rows")), None)
@@ -363,6 +487,25 @@ class OutputPackager:
                 columns, rows = [], []
 
         return DataSheet(columns=columns, rows=rows, conditional_formatting=self._conditional_formatting(columns))
+
+    def _combo_data_sheet(self, records, meta) -> tuple[list[str], list[list[Any]]]:
+        """Rank | Branch | [Zone] | <Metric> (₦) | Target (₦) | Variance (₦) | Variance % | Status."""
+        entity = meta["entity_label"]
+        metric = meta["metric_label"]
+        suffix = " (₦)" if meta["is_currency"] else ""
+        columns = ["Rank", entity]
+        if meta["has_zone"]:
+            columns.append("Zone")
+        columns += [f"{metric}{suffix}", f"Target{suffix}", "Variance (₦)", "Variance %", "Status"]
+
+        rows = []
+        for r in records:
+            row = [r["rank"], r["branch"]]
+            if meta["has_zone"]:
+                row.append(r["zone"])
+            row += [r["deposits"], r["target"], r["variance"], r["variance_pct"], r["status"]]
+            rows.append(row)
+        return columns, rows
 
     def _growth_data_sheet(self, wide) -> tuple[list[str], list[list[Any]]]:
         group_col = wide.get("group_col", "Group")
@@ -426,7 +569,11 @@ class OutputPackager:
 
     # -- analysis sheet -----------------------------------------------------
 
-    def _analysis_sheet(self, results) -> AnalysisSheet:
+    def _analysis_sheet(self, action_plan, results) -> AnalysisSheet:
+        combo = self._top_variance(action_plan, results)
+        if combo:
+            return self._combo_analysis(*combo)
+
         metrics: list[Metric] = []
         rankings: list[Any] = []
         growth_table: list[Any] = []
@@ -467,6 +614,77 @@ class OutputPackager:
                 ))
 
         return AnalysisSheet(metrics=metrics, rankings=rankings, growth_table=growth_table, insights=insights[:5])
+
+    def _combo_analysis(self, records, meta) -> AnalysisSheet:
+        """Analysis sheet for a top-N + variance question — already limited to the
+        ranked top-N branches, with human-readable column names."""
+        entity = meta["entity_label"]
+        metric = meta["metric_label"]
+        suffix = " (₦)" if meta["is_currency"] else ""
+        above = [r for r in records if r["variance"] is not None and r["variance"] > 0]
+        below = [r for r in records if r["variance"] is not None and r["variance"] < 0]
+        total_dep = sum(r["deposits"] for r in records if isinstance(r["deposits"], (int, float)))
+        total_tgt = sum(r["target"] for r in records if isinstance(r["target"], (int, float)))
+        best = max((r for r in records if r["variance_pct"] is not None), key=lambda r: r["variance_pct"], default=None)
+        worst = min((r for r in records if r["variance_pct"] is not None), key=lambda r: r["variance_pct"], default=None)
+
+        metrics = [
+            Metric(label="Above target", value=f"{len(above)} of {len(records)}", formula_used=f"{metric} > Target"),
+            Metric(label="Below target", value=f"{len(below)} of {len(records)}", formula_used=f"{metric} < Target"),
+            Metric(label=f"Total {metric} (Top {meta['top_n']})", value=self._naira0(total_dep) if meta["is_currency"] else f"{total_dep:,.0f}",
+                   formula_used=f"sum of top {meta['top_n']} {metric.lower()}"),
+            Metric(label="Total target", value=self._naira0(total_tgt) if meta["is_currency"] else f"{total_tgt:,.0f}",
+                   formula_used="sum of targets"),
+        ]
+        if best:
+            metrics.append(Metric(label="Best vs target", value=f"{best['branch']} ({format_pct(best['variance_pct'], signed=True)})", formula_used="max (metric − target) / target"))
+        if worst and worst["variance_pct"] is not None and worst["variance_pct"] < 0:
+            metrics.append(Metric(label="Worst vs target", value=f"{worst['branch']} ({format_pct(worst['variance_pct'], signed=True)})", formula_used="min (metric − target) / target"))
+
+        # Human-readable, top-N-limited variance table (rendered by AnalysisSheet._growth).
+        table = []
+        for r in records:
+            row = {"Rank": r["rank"], entity: r["branch"]}
+            if meta["has_zone"]:
+                row["Zone"] = r["zone"]
+            row[f"{metric}{suffix}"] = r["deposits"]
+            row[f"Target{suffix}"] = r["target"]
+            row["Variance (₦)"] = r["variance"]
+            row["Variance %"] = r["variance_pct"]
+            row["Status"] = r["status"]
+            row["direction"] = r["direction"]
+            table.append(row)
+
+        return AnalysisSheet(metrics=metrics, rankings=[], growth_table=table,
+                             insights=self._combo_insights(records, meta)[:5])
+
+    def _combo_insights(self, records, meta) -> list[str]:
+        entity = meta["entity_label"].lower()
+        top_n = meta["top_n"]
+        cur = meta["is_currency"]
+        above = [r for r in records if r["variance"] is not None and r["variance"] > 0]
+        below = [r for r in records if r["variance"] is not None and r["variance"] < 0]
+        best = max((r for r in records if r["variance_pct"] is not None), key=lambda r: r["variance_pct"], default=None)
+        worst = min((r for r in records if r["variance_pct"] is not None), key=lambda r: r["variance_pct"], default=None)
+        total_dep = sum(r["deposits"] for r in records if isinstance(r["deposits"], (int, float)))
+        total_tgt = sum(r["target"] for r in records if isinstance(r["target"], (int, float)))
+
+        def nc(v):
+            if not isinstance(v, (int, float)):
+                return "—"
+            return format_naira(v, compact=True).replace(".00", "") if cur else f"{v:,.0f}"
+
+        out: list[str] = []
+        if best and best["variance"] is not None:
+            out.append(f"{best['branch']} exceeds its {nc(best['target'])} target by {nc(best['variance'])} ({format_pct(best['variance_pct'], signed=True)}), the strongest performance in this group.")
+        out.append(f"{len(above)} of the top {top_n} {self._plural(entity, len(records))} are above target; {len(below)} fell short.")
+        if below and worst and worst["variance"] is not None:
+            only = "the only branch below target" if len(below) == 1 else "the weakest performer"
+            out.append(f"{worst['branch']} is {only}, falling short by {nc(abs(worst['variance']))} ({format_pct(worst['variance_pct'], signed=True)}).")
+        if total_tgt:
+            gap_pct = (total_dep - total_tgt) / total_tgt * 100.0
+            out.append(f"Together the top {top_n} {self._plural(entity, top_n)} hold {nc(total_dep)} against a {nc(total_tgt)} target ({format_pct(gap_pct, signed=True)}).")
+        return out
 
     def _aggregation_metrics(self, result) -> list[Metric]:
         metrics = []
@@ -636,11 +854,13 @@ class OutputPackager:
         for result in results:
             if result.get("operation_type") != "chart":
                 continue
+            image_path = result.get("image_path") or ""
+            print(f"[packager] Chart path: {image_path}")
             charts.append(Chart(
                 chart_id=result.get("operation_id", "chart"),
                 chart_type=result.get("chart_type", "bar"),
                 title=result.get("title", ""),
-                image_path=result.get("image_path") or "",
+                image_path=image_path,
                 recharts_data=result.get("recharts_data", []),
             ))
         return charts

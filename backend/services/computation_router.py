@@ -65,7 +65,67 @@ class ComputationRouter:
             if result is not None:
                 all_results.append(result)
 
+        # Auto-generate charts when the plan wants a Charts sheet but the planner
+        # supplied no explicit chart operation (e.g. a "top 5 + variance" question).
+        all_results.extend(self._auto_charts(action_plan, all_results, sheets, charts_dir))
+
         return self.packager.package(action_plan, all_results, session, sheets=sheets)
+
+    def _auto_charts(self, action_plan, results, sheets, charts_dir) -> list[dict[str, Any]]:
+        if any(op.operation_type == "chart" for op in action_plan.operations):
+            return []
+        if "charts" not in [str(s) for s in action_plan.output_sheets_required]:
+            return []
+        rank = next((r for r in results if r.get("operation_type") == "rank" and r.get("rows")), None)
+        if not rank:
+            return []
+        cols = rank.get("columns", [])
+        rows = rank.get("rows", [])
+        ranked_by = rank.get("ranked_by")
+        if ranked_by not in cols or not rows:
+            return []
+        dep_i = cols.index(ranked_by)
+        ent_i = next((i for i, c in enumerate(cols) if c not in ("Rank", ranked_by) and isinstance(rows[0][i], str)), None)
+        if ent_i is None:
+            return []
+
+        branches = [r[ent_i] for r in rows]
+        deposits = [r[dep_i] for r in rows]
+        target_sheet = next(iter(sheets), "Sheet1")
+        charts: list[dict[str, Any]] = []
+
+        df1 = pd.DataFrame({"Branch": branches, ranked_by: deposits})
+        op1 = Operation(
+            operation_id="auto_chart_primary", operation_type="chart", target_sheet=target_sheet,
+            target_columns=["Branch", ranked_by], group_by=[],
+            parameters={"chart_type": "bar", "x": "Branch", "y": ranked_by},
+            output_sheet="charts", output_label=f"Top {len(branches)} Branches by {ranked_by} (₦)",
+        )
+        charts.append(self.chart.execute(op1, df1, str(charts_dir)))
+
+        # Variance chart (positive green / negative red) when a target exists.
+        var_op = next((op for op in action_plan.operations if op.operation_type == "variance"), None)
+        target_col = None
+        if var_op:
+            target_col = var_op.parameters.get("target_column") or var_op.parameters.get("target")
+        if target_col not in cols:
+            target_col = next((c for c in cols if str(c).lower() in ("target", "budget", "goal", "plan")), None)
+        if target_col in cols:
+            tgt_i = cols.index(target_col)
+            variance = [
+                (r[dep_i] - r[tgt_i]) if isinstance(r[dep_i], (int, float)) and isinstance(r[tgt_i], (int, float)) else None
+                for r in rows
+            ]
+            df2 = pd.DataFrame({"Branch": branches, "Variance": variance})
+            op2 = Operation(
+                operation_id="auto_chart_variance", operation_type="chart", target_sheet=target_sheet,
+                target_columns=["Branch", "Variance"], group_by=[],
+                parameters={"chart_type": "bar", "x": "Branch", "y": "Variance", "diverging": True},
+                output_sheet="charts", output_label="Variance vs Target per Branch",
+            )
+            charts.append(self.chart.execute(op2, df2, str(charts_dir)))
+
+        return [c for c in charts if c and c.get("image_path")]
 
     # -- internals ----------------------------------------------------------
 
@@ -105,6 +165,11 @@ class ComputationRouter:
         return next(iter(sheets.values()))
 
     def _load_sheets(self, session: dict[str, Any]) -> dict[str, pd.DataFrame]:
+        # Honour pre-loaded dataframes on the session first (tests, in-memory flows).
+        pre = session.get("sheet_dataframes")
+        if isinstance(pre, dict) and pre:
+            return {str(name): df for name, df in pre.items() if isinstance(df, pd.DataFrame)}
+
         file_path = session.get("file_path")
         if not file_path:
             return {}

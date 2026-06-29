@@ -237,8 +237,8 @@ class GrowthModule:
             return self._result(operation, [], [], [], warnings=["Empty dataframe — nothing to compute."])
 
         params = operation.parameters or {}
-        explicit_actual = params.get("actual") or self._find_named(df, ["actual", "achieved", "result"])
-        target_col = params.get("target") or self._find_named(df, ["target", "budget", "plan", "forecast", "goal"])
+        explicit_actual = params.get("actual") or params.get("actual_column") or self._find_named(df, ["actual", "achieved", "result"])
+        target_col = params.get("target") or params.get("target_column") or self._find_named(df, ["target", "budget", "plan", "forecast", "goal"])
 
         # Wide-format variance: actual is the SUM of monthly columns vs a Target.
         period_cols = [

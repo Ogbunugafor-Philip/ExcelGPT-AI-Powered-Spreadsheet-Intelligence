@@ -2,64 +2,61 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
 
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 from . import styles as S
-
-logger = logging.getLogger(__name__)
-
-CHART_W = 500
-CHART_H = 300
-ROW_SPAN = 17          # rows each chart block occupies (title + image)
 
 
 class ChartsSheet:
     def build(self, ws, charts: list[dict[str, Any]]) -> None:
-        S.hide_gridlines(ws)
-        ws.sheet_properties.tabColor = S.AMBER
-        S.set_column_widths(ws, 18, first=1, last=10)
-
         if not charts:
-            S.style_cell(ws["A1"], value="No charts generated for this report.",
-                         font_=S.font(11, italic=True, color=S.TEXT_MUTED))
-            S.paint_canvas(ws, max_row=2, max_col=10, color=S.ROW_MAIN)
+            ws["A1"] = "No charts generated for this analysis."
+            ws.sheet_view.showGridLines = False
             return
 
-        max_row = 1
-        for index, chart in enumerate(charts):
-            title_row = 1 + index * ROW_SPAN
-            image_row = title_row + 1
+        current_row = 1
+        charts_embedded = 0
 
-            # Bold chart title above the image.
-            ws.merge_cells(start_row=title_row, start_column=1, end_row=title_row, end_column=6)
-            S.style_cell(ws.cell(row=title_row, column=1), value=chart.get("title", "Chart"),
-                         font_=S.font(13, bold=True, color=S.SECTION_HEADER), align=S.LEFT)
-            ws.row_dimensions[title_row].height = 20
+        for i, chart in enumerate(charts):
+            image_path = chart.get("image_path", "")
+            title = chart.get("title", f"Chart {i + 1}")
 
-            image_path = chart.get("image_path")
-            anchor = f"A{image_row}"
+            # Title band above the image.
+            title_cell = ws.cell(row=current_row, column=1, value=title)
+            title_cell.font = Font(bold=True, color="FFFFFF", size=13)
+            title_cell.fill = PatternFill(start_color="1F3864", end_color="1F3864", fill_type="solid")
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=8)
+            current_row += 1
+
             if image_path and os.path.exists(image_path):
                 try:
                     img = XLImage(image_path)
-                    img.width = CHART_W
-                    img.height = CHART_H
-                    ws.add_image(img, anchor)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Failed to embed chart image %s: %s", image_path, exc)
-                    self._placeholder(ws, image_row, f"Chart could not be embedded ({exc})")
+                    img.width = 600
+                    img.height = 350
+                    ws.add_image(img, f"A{current_row}")
+                    # Reserve rows for the image (~350px / ~15px per row ≈ 24 rows).
+                    current_row += 24
+                    charts_embedded += 1
+                    print(f"[charts_sheet] Embedded chart: {image_path}")
+                except Exception as e:  # noqa: BLE001
+                    ws.cell(row=current_row, column=1, value=f"Chart error: {e}")
+                    current_row += 2
             else:
-                logger.warning("Chart image not found, skipping embed: %s", image_path)
-                self._placeholder(ws, image_row, f"Chart image not found: {image_path}")
+                ws.cell(row=current_row, column=1, value=f"Chart image not found: {image_path}")
+                print(f"[charts_sheet] WARNING: Chart not found: {image_path}")
+                current_row += 2
 
-            ws.row_dimensions[image_row].height = CHART_H * 0.75  # px -> points approximation
-            max_row = max(max_row, title_row + ROW_SPAN)
+            current_row += 2  # gap between charts
 
-        S.paint_canvas(ws, max_row=max_row, max_col=10, color=S.ROW_MAIN)
+        print(f"[charts_sheet] Embedded {charts_embedded} of {len(charts)} charts")
 
-    def _placeholder(self, ws, row, text):
-        S.style_cell(ws.cell(row=row, column=1), value=text,
-                     font_=S.font(11, italic=True, color=S.NEGATIVE_TEXT), fill_=S.fill(S.NEGATIVE_BG), align=S.LEFT)
+        # Column widths for chart display.
+        for col in range(1, 9):
+            ws.column_dimensions[get_column_letter(col)].width = 18
+        ws.sheet_view.showGridLines = False
+        ws.sheet_properties.tabColor = S.AMBER
