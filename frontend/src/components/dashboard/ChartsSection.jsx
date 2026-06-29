@@ -15,18 +15,17 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import InsightCard from './InsightCard'
 
-const CORAL = '#FF6B6B'
-const TEAL = '#4ECDC4'
-const GOLD = '#FFD700'
-const AMBER = '#FFB347'
-const RED_ALERT = '#FF4757'
-const GREY = '#A0A0A0'
-const PIE_COLORS = [CORAL, TEAL, GOLD, AMBER, RED_ALERT, '#FF8E8E', '#606060']
+const CORAL = '#FF5C5C'
+const TEAL = '#34D399'
+const GOLD = '#F59E0B'
+const WARNING = '#FBBF24'
+const NEGATIVE = '#F87171'
+const TEXT3 = '#52525B'
+const PIE_COLORS = [CORAL, TEAL, GOLD, WARNING, NEGATIVE, '#FF8E8E', TEXT3]
 
-const AXIS_PROPS = { tick: { fill: '#F7F7F7', fontSize: 11 }, stroke: GREY }
-const GRID_PROPS = { stroke: '#2A2A2A', strokeDasharray: '3 3' }
+const AXIS_PROPS = { tick: { fill: '#52525B', fontSize: 11 }, stroke: 'rgba(255,255,255,0.12)' }
+const GRID_PROPS = { stroke: 'rgba(255,255,255,0.06)', strokeDasharray: '3 3' }
 
 const compact = (value) =>
   typeof value === 'number' ? value.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 }) : value
@@ -37,12 +36,11 @@ const full = (value, displayName) => {
   return displayName && displayName.includes('₦') ? `₦${text}` : text
 }
 
-// Colour ranking bars: strongest gold, weakest red, the rest electric blue.
+// Colour ranking bars: coral primary, muted grey for the rest.
 const barColors = (data) => {
   const values = data.map((d) => (typeof d.value === 'number' ? d.value : -Infinity))
   const maxIdx = values.indexOf(Math.max(...values))
-  const minIdx = values.indexOf(Math.min(...values))
-  return data.map((_, i) => (i === maxIdx ? GOLD : i === minIdx && minIdx !== maxIdx ? RED_ALERT : CORAL))
+  return data.map((_, i) => (i === maxIdx ? CORAL : TEXT3))
 }
 
 function DashTooltip({ active, payload }) {
@@ -51,11 +49,11 @@ function DashTooltip({ active, payload }) {
   const metric = row.displayName || 'Value'
   const category = row.label || row.name
   return (
-    <div className="rounded-lg border border-white/10 bg-navy px-3 py-2 text-xs">
-      {category ? <p className="mb-1 font-semibold text-white">{category}</p> : null}
-      <p className="text-text-primary">
-        <span className="text-text-secondary">{metric}: </span>
-        {full(row.value, metric)}
+    <div className="rounded-lg border border-border-strong bg-card px-3 py-2 text-xs shadow-elevated">
+      {category ? <p className="mb-1 font-semibold text-text-1">{category}</p> : null}
+      <p>
+        <span className="text-text-2">{metric}: </span>
+        <span className="font-medium text-text-1">{full(row.value, metric)}</span>
       </p>
     </div>
   )
@@ -64,7 +62,7 @@ function DashTooltip({ active, payload }) {
 function ChartBody({ chart, type }) {
   const data = chart.recharts_data || []
   if (!data.length) {
-    return <div className="flex h-[320px] items-center justify-center text-sm text-text-secondary">No chart data</div>
+    return <div className="flex h-[320px] items-center justify-center text-sm text-text-2">No chart data</div>
   }
   const metric = chart.y_label || data[0]?.displayName || 'Value'
 
@@ -97,8 +95,8 @@ function ChartBody({ chart, type }) {
           <XAxis dataKey="name" {...AXIS_PROPS} />
           <YAxis tickFormatter={compact} {...AXIS_PROPS} />
           <Tooltip content={<DashTooltip />} />
-          <Area type="monotone" dataKey="value" stroke="none" fill={CORAL} fillOpacity={0.18} />
-          <Line type="monotone" dataKey="value" name={metric} stroke={CORAL} strokeWidth={2.5} dot={{ fill: '#FF8E8E', r: 3 }} />
+          <Area type="monotone" dataKey="value" stroke="none" fill={CORAL} fillOpacity={0.2} />
+          <Line type="monotone" dataKey="value" name={metric} stroke={CORAL} strokeWidth={2.5} dot={{ fill: TEAL, stroke: TEAL, r: 3 }} activeDot={{ fill: CORAL, r: 5 }} />
         </ComposedChart>
       </ResponsiveContainer>
     )
@@ -123,7 +121,7 @@ function ChartBody({ chart, type }) {
           ))}
         </Pie>
         <Tooltip content={<DashTooltip />} />
-        <Legend wrapperStyle={{ color: '#F9FAFB', fontSize: 12 }} />
+        <Legend wrapperStyle={{ color: '#A1A1AA', fontSize: 12 }} />
       </PieChart>
     </ResponsiveContainer>
   )
@@ -140,14 +138,14 @@ function ChartCard({ chart }) {
   const [type, setType] = useState(initial)
 
   const selector = (
-    <div className="flex gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+    <div className="flex gap-1 rounded-lg border border-border bg-white/5 p-0.5">
       {TYPES.map((t) => (
         <button
           key={t.key}
           type="button"
           onClick={() => setType(t.key)}
           className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
-            type === t.key ? 'bg-blue-electric text-white' : 'text-text-secondary hover:text-text-primary'
+            type === t.key ? 'bg-coral text-white' : 'text-text-2 hover:text-text-1'
           }`}
         >
           {t.label}
@@ -157,9 +155,11 @@ function ChartCard({ chart }) {
   )
 
   return (
-    <InsightCard title={chart.title} action={selector}>
+    <div className="eg-anim-rise">
+      {/* No card wrapper, no title — the question is the title. Toggle only. */}
+      <div className="mb-2 flex justify-end">{selector}</div>
       <ChartBody chart={chart} type={type} />
-    </InsightCard>
+    </div>
   )
 }
 
@@ -167,7 +167,7 @@ export default function ChartsSection({ charts }) {
   const items = charts || []
   if (!items.length) return null
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
       {items.map((chart) => (
         <ChartCard key={chart.chart_id} chart={chart} />
       ))}

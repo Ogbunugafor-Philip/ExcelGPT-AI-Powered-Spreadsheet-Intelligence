@@ -70,59 +70,66 @@ export default function UploadView({ onUpload }) {
   })
 
   const zoneClasses = [
-    'relative w-full max-w-[520px] cursor-pointer rounded-3xl bg-card p-10 sm:p-14 text-center transition-all duration-200',
+    'relative w-full max-w-[480px] cursor-pointer overflow-hidden rounded-2xl bg-card px-8 py-12 text-center transition-all duration-200',
     isDragActive
-      ? 'border-2 border-solid border-coral eg-anim-coral-pulse'
-      : 'border-2 border-dashed border-coral/60 hover:border-coral hover:shadow-glow-coral',
+      ? 'scale-[1.01] border-[1.5px] border-solid border-coral bg-coral/5'
+      : 'border-[1.5px] border-dashed border-border-strong hover:border-coral hover:bg-coral/5',
   ].join(' ')
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-base px-6 py-12">
-      <header className="mb-10 text-center">
-        <h1 className="font-display text-[32px] font-extrabold">
-          <span className="text-text-primary">Excel</span>
+      <header className="text-center">
+        <h1 className="font-display text-[28px] font-bold">
+          <span className="text-text-1">Excel</span>
           <span className="text-coral">GPT</span>
         </h1>
-        <p className="mt-2 text-body text-text-muted">Your data. Your questions. Instant answers.</p>
+        <p className="mt-2 text-base text-text-2">Ask your data anything.</p>
       </header>
 
-      <div {...getRootProps()} className={zoneClasses}>
+      <div {...getRootProps()} className={`mt-12 ${zoneClasses}`}>
         <input {...getInputProps()} />
 
         {phase === 'success' ? (
           <div className="flex flex-col items-center">
-            <CheckCircle2 className="eg-anim-check h-12 w-12 text-teal" />
-            <p className="mt-4 text-subheading text-teal">Uploaded</p>
-            <p className="mt-1 text-small text-text-muted">{fileName}</p>
+            <CheckCircle2 className="eg-anim-check h-8 w-8 text-positive" />
+            <p className="mt-4 text-[16px] font-semibold text-positive">Uploaded</p>
+            <p className="mt-1 text-[14px] text-text-2">{fileName}</p>
           </div>
         ) : phase === 'uploading' ? (
           <div className="flex flex-col items-center">
-            <FileSpreadsheet className="h-12 w-12 text-coral" />
-            <p className="mt-4 text-subheading text-text-primary">{fileName}</p>
-            <div className="mt-5 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-hover">
-              <div className="eg-progress-fill h-full rounded-full transition-all duration-200" style={{ width: `${progress}%` }} />
-            </div>
-            <p className="mt-3 text-small text-text-secondary">Uploading… {progress}%</p>
+            <FileSpreadsheet className="h-8 w-8 text-coral" />
+            <p className="mt-4 text-[16px] font-semibold text-text-1">{fileName}</p>
+            <p className="mt-2 text-[14px] text-text-2">Uploading… {progress}%</p>
           </div>
         ) : (
           <div className="flex flex-col items-center">
-            <Upload className={`h-12 w-12 transition-colors ${isDragActive ? 'text-coral-light' : 'text-coral'}`} />
-            <p className="mt-4 text-lg font-bold text-text-primary">
-              {isDragActive ? 'Release to upload' : 'Drop your Excel file here'}
+            <Upload className={`h-8 w-8 transition-colors ${isDragActive ? 'text-coral' : 'text-text-3'}`} />
+            <p className="mt-4 text-[16px] font-semibold text-text-1">
+              {isDragActive ? 'Release to upload' : 'Drop your Excel file'}
             </p>
-            <p className="mt-1.5 text-small text-text-muted">or click to browse</p>
-            <p className="mt-3 text-micro text-text-muted">.xlsx and .xls · up to 50MB</p>
+            <p className="mt-1 text-[14px] text-text-2">or click to browse</p>
+            <p className="mt-2 text-[12px] text-text-3">.xlsx · .xls · up to 50MB</p>
           </div>
         )}
+
+        {/* Coral progress bar pinned to the bottom edge of the zone. */}
+        {phase === 'uploading' ? (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-hover">
+            <div
+              className="eg-progress-fill h-full rounded-br-2xl transition-all duration-200"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        ) : null}
       </div>
 
       {phase === 'error' && error ? (
-        <div className="mt-6 w-full max-w-[520px] rounded-2xl border border-red-alert/30 bg-red-alert/10 p-4">
+        <div className="mt-6 w-full max-w-[480px] rounded-xl border border-negative/30 bg-negative/10 p-4">
           <div className="flex items-start gap-3">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-alert" />
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-negative" />
             <div className="min-w-0">
-              <p className="font-semibold text-red-alert">{error.title}</p>
-              <p className="mt-1 text-small text-text-secondary">{error.message}</p>
+              <p className="font-semibold text-negative">{error.title}</p>
+              <p className="mt-1 text-[14px] text-text-2">{error.message}</p>
               <button
                 type="button"
                 onClick={() => {
@@ -130,7 +137,7 @@ export default function UploadView({ onUpload }) {
                   setError(null)
                   open()
                 }}
-                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-coral px-4 py-2 text-small font-semibold text-coral transition hover:bg-coral/10"
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-coral px-4 py-2 text-[13px] font-semibold text-coral transition hover:bg-coral/10"
               >
                 Try another file
               </button>

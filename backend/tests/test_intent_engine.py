@@ -178,3 +178,40 @@ def test_empty_instruction_raises():
     engine = IntentEngine(api_key="test-key")
     with pytest.raises(IntentEngineError):
         engine.classify(BRIEF, "   ")
+
+
+def test_regional_question_groups_by_region_not_date():
+    """Regression: 'regional performance by deposit and customer onboarding' must
+    produce a group_sum BY Region (with the accounts column), never a rank/growth
+    keyed on Date. See ExcelGPT 'unusable' bug report."""
+    brief = {
+        "filename": "fso.xlsx",
+        "sheets": [
+            {
+                "name": "Sheet1",
+                "row_count": 53000,
+                "column_summary": [
+                    {"name": "Date"},
+                    {"name": "Region"},
+                    {"name": "State"},
+                    {"name": "FSO Name"},
+                    {"name": "Deposits (₦)"},
+                    {"name": "Accounts_Opened"},
+                ],
+            }
+        ],
+    }
+    engine = IntentEngine(api_key="")  # no network — exercise the rule-based fallback
+    plan = engine._rule_based_fallback(
+        brief, "show me regional performance by deposit and customer onboarding"
+    )
+
+    group_ops = [op for op in plan.operations if op.operation_type == "group_sum"]
+    assert any(op.group_by == ["Region"] for op in group_ops), "expected a group_sum BY Region"
+    region_op = next(op for op in group_ops if op.group_by == ["Region"])
+    assert "Accounts_Opened" in region_op.target_columns, "accounts column must be included"
+    # No operation may rank/trend on the Date column.
+    assert not any(
+        op.operation_type in ("rank", "growth_rate") and "Date" in op.group_by
+        for op in plan.operations
+    ), "a regional question must not be answered with a date-keyed operation"

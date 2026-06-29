@@ -4,11 +4,34 @@ INSIGHTS section. Everything is built from the actual computation output."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from openpyxl.utils import get_column_letter
 
 from . import styles as S
+
+# Matches internal phrasing like "sum over 6 groups" / "mean over 12 groups".
+_OVER_N_RE = re.compile(r"\b(sum|mean|average|avg|count)\s+over\s+(\d+)\s+(\w+)", re.I)
+
+
+def clean_formula(value: Any) -> str:
+    """Turn any leftover internal formula language into clean, user-facing text.
+
+    "sum over 6 groups"  -> "Sum across 6 groups"
+    None / ""            -> "" (blank, never the literal 'None')
+    Legitimate human formulas (Pearson correlation, (a−b)/b × 100) pass through.
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    match = _OVER_N_RE.search(text)
+    if match:
+        verb = {"avg": "Average", "mean": "Average"}.get(match.group(1).lower(), match.group(1).capitalize())
+        return f"{verb} across {match.group(2)} {match.group(3).lower()}"
+    return text
 
 # Rank medals (light theme): gold / silver / bronze tints.
 MEDALS = {1: S.GOLD_BG, 2: "ECEFF4", 3: "F3E5D8"}
@@ -82,7 +105,7 @@ class AnalysisSheet:
             S.style_cell(ws.cell(row=row, column=2), value=metric.get("value", ""),
                          font_=S.font(11, bold=True, color=S.SECTION_HEADER), fill_=S.fill(bg), align=S.RIGHT, border=border)
             ws.merge_cells(start_row=row, start_column=3, end_row=row, end_column=SECTION_SPAN)
-            S.style_cell(ws.cell(row=row, column=3), value=metric.get("formula_used", ""),
+            S.style_cell(ws.cell(row=row, column=3), value=clean_formula(metric.get("formula_used")),
                          font_=S.font(9, italic=True, color=S.TEXT_MUTED), fill_=S.fill(bg), align=S.LEFT)
             ws.row_dimensions[row].height = 16
             row += 1

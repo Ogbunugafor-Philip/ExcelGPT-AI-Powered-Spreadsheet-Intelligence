@@ -17,7 +17,7 @@ const RANKING_PREVIEW = 20
 const Section = ({ label, children }) => (
   <div className="space-y-3">
     {label ? (
-      <p className="text-micro uppercase tracking-wider text-text-muted">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-3">{label}</p>
     ) : null}
     {children}
   </div>
@@ -80,17 +80,16 @@ export default function ChatExchange({ item, onDownload }) {
   const rankingRows = showAllRankings ? rankings : rankings.slice(0, RANKING_PREVIEW)
 
   return (
-    <div id={`exchange-${item.id}`} className="scroll-mt-6 space-y-4">
-      {/* Question bubble — right aligned */}
-      <div className="flex flex-col items-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-coral px-4 py-2.5 text-small font-medium text-white">
-          {item.question}
-        </div>
-        {time ? <span className="mt-1 pr-1 text-micro text-text-muted">{time}</span> : null}
+    <div id={`exchange-${item.id}`} className="scroll-mt-8">
+      {/* Question — a simple text line, not a bubble. */}
+      <div className="mb-4 flex items-start gap-2.5">
+        <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-coral" />
+        <p className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-text-1">{item.question}</p>
+        {time ? <span className="mt-0.5 shrink-0 text-[11px] text-text-3">{time}</span> : null}
       </div>
 
-      {/* Answer card — left aligned */}
-      <div className="eg-anim-slide-up rounded-2xl border border-border bg-card p-5 sm:p-6">
+      {/* Answer card */}
+      <div className="eg-anim-slide-up mb-8 rounded-xl border border-border bg-card p-6 shadow-card">
         {item.error ? (
           <div className="flex items-start gap-3 text-small text-red-alert">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -107,8 +106,6 @@ export default function ChatExchange({ item, onDownload }) {
           </div>
         ) : (
           <div className="space-y-6">
-            {title ? <h3 className="text-subheading text-text-primary">{title}</h3> : null}
-
             {kpiCards.length ? (
               <Section label="Key figures">
                 <KPIStrip cards={kpiCards} />
@@ -187,25 +184,26 @@ export default function ChatExchange({ item, onDownload }) {
           </div>
         )}
 
-        {/* Card actions — only when there is a real downloadable answer */}
+        {/* Card actions — coral text link + dot separator + copy link. */}
         {!item.error && !clarification && item.downloadToken ? (
-          <div className="mt-6 flex flex-wrap gap-3 border-t border-border pt-4">
+          <div className="mt-4 flex items-center gap-3 border-t border-border pt-3">
             <button
               type="button"
               onClick={handleDownload}
               disabled={downloading}
-              className="inline-flex items-center gap-2 rounded-lg border border-coral px-4 py-2 text-small font-semibold text-coral transition hover:bg-coral/10 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-coral transition hover:text-coral-light disabled:opacity-50"
             >
-              {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              Download This
+              {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              Download
             </button>
+            <span className="h-1 w-1 rounded-full bg-text-3" aria-hidden="true" />
             <button
               type="button"
               onClick={handleCopy}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-small font-semibold text-text-secondary transition hover:bg-hover hover:text-text-primary"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 transition hover:text-text-1"
             >
-              {copied ? <Check className="h-4 w-4 text-teal" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copied' : 'Copy Insight'}
+              {copied ? <Check className="h-3.5 w-3.5 text-positive" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
         ) : null}

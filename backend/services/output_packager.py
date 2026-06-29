@@ -291,16 +291,57 @@ class OutputPackager:
         order = {"growth_rate": 0, "variance": 1, "rank": 2, "group_sum": 3, "group_avg": 3}
         return order.get(op_type, 9)
 
+    @staticmethod
+    def _group_dimension(result) -> str | None:
+        """The raw name of the column a group_sum/group_avg was grouped by
+        (the first non-value column of the result), e.g. 'Region'."""
+        columns = result.get("columns", []) or []
+        value_cols = set(result.get("value_columns", []) or [])
+        for column in columns:
+            if column not in value_cols:
+                return column
+        return columns[0] if columns else None
+
     def _kpi_from_aggregation(self, result) -> list[KpiCard]:
-        cards = []
+        """KPI cards for a grouped roll-up. The labels reflect the GROUP
+        dimension (Top Region / Regions Analysed) — never a generic 'groups'
+        count and never the wrong entity (e.g. 'Top Date' for a regional Q)."""
         stats = result.get("summary_stats", {})
         currency_cols = set(result.get("currency_columns", []))
-        for column in result.get("value_columns", []):
+        value_columns = result.get("value_columns", []) or []
+        columns = result.get("columns", []) or []
+        rows = result.get("rows", []) or []
+
+        group_col = self._group_dimension(result)
+        dim_label = self._pretty(group_col) if group_col else "Group"
+        cards: list[KpiCard] = []
+
+        # Card 1 — the top group by the primary metric (rows are pre-sorted
+        # descending on the first value column by the aggregation module).
+        primary = value_columns[0] if value_columns else None
+        if rows and group_col in columns:
+            g_idx = columns.index(group_col)
+            top_name = str(rows[0][g_idx]) if g_idx < len(rows[0]) else "—"
+            change = ""
+            if primary in columns:
+                p_idx = columns.index(primary)
+                pv = rows[0][p_idx] if p_idx < len(rows[0]) else None
+                if isinstance(pv, (int, float)) and not isinstance(pv, bool):
+                    change = format_naira(pv, compact=True) if primary in currency_cols else f"{pv:,.0f}"
+            cards.append(KpiCard(label=f"Top {dim_label}", value=top_name, change=change, direction="up"))
+
+        # Cards 2..N — the grand total of each aggregated metric.
+        for column in value_columns:
             total = stats.get(f"total_{column}")
             if total is None:
                 continue
-            value = format_naira(total, compact=True) if column in currency_cols else f"{to_jsonable(total):,.2f}"
-            cards.append(KpiCard(label=f"Total {self._pretty(column)}", value=value, change=f"{stats.get('groups', 0)} groups", direction="neutral"))
+            value = format_naira(total, compact=True) if column in currency_cols else f"{to_jsonable(total):,.0f}"
+            cards.append(KpiCard(label=f"Total {self._pretty(column)}", value=value, change="", direction="neutral"))
+
+        # Final card — how many groups were analysed, named by the dimension.
+        n = int(stats.get("groups", len(rows)) or len(rows))
+        if n:
+            cards.append(KpiCard(label=f"{self._plural(dim_label, n)} Analysed", value=f"{n:,}", change="", direction="neutral"))
         return cards
 
     def _kpi_from_rank(self, result) -> list[KpiCard]:
@@ -690,13 +731,18 @@ class OutputPackager:
         metrics = []
         stats = result.get("summary_stats", {})
         currency_cols = set(result.get("currency_columns", []))
-        how = stats.get("aggregation", "sum")
+        how = str(stats.get("aggregation", "sum")).lower()
+        verb = "Average" if how in ("mean", "avg", "average") else "Sum" if how == "sum" else how.title()
+        groups = int(stats.get("groups", 0) or 0)
+        dim_label = self._pretty(self._group_dimension(result)) if self._group_dimension(result) else "Group"
+        # Human-readable method, e.g. "Sum across 6 regions" — never "sum over N groups".
+        method = f"{verb} across {groups} {self._plural(dim_label, groups).lower()}" if groups else f"{verb} of all values"
         for column in result.get("value_columns", []):
             total = stats.get(f"total_{column}")
             if total is None:
                 continue
             value = format_naira(total, compact=True) if column in currency_cols else f"{to_jsonable(total):,.2f}"
-            metrics.append(Metric(label=f"Total {self._pretty(column)}", value=value, formula_used=f"{how} over {stats.get('groups', 0)} groups"))
+            metrics.append(Metric(label=f"Total {self._pretty(column)}", value=value, formula_used=method))
         return metrics
 
     def _growth_metrics(self, result) -> list[Metric]:

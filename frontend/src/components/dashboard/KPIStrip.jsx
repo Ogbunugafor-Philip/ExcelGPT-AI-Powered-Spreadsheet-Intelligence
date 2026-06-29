@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 
 // Direction indicator styling for the change line.
 const DIRECTION = {
-  up: { arrow: '↑', className: 'text-emerald' },
-  down: { arrow: '↓', className: 'text-red-alert' },
-  neutral: { arrow: '→', className: 'text-amber' },
+  up: { arrow: '↑', className: 'text-positive' },
+  down: { arrow: '↓', className: 'text-negative' },
+  neutral: { arrow: '→', className: 'text-warning' },
 }
 
 const NUMBER_RE = /-?\d[\d,]*(?:\.\d+)?/
@@ -58,15 +58,15 @@ function KpiCard({ card, index }) {
   const dir = DIRECTION[card.direction] || DIRECTION.neutral
   return (
     <div
-      className="eg-anim-rise rounded-2xl border border-white/10 border-t-[3px] border-t-coral bg-card p-5 transition hover:border-coral/40 hover:shadow-glow-coral"
+      className="eg-anim-rise rounded-lg border border-border bg-surface p-4 transition hover:border-border-strong hover:shadow-elevated"
       style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
     >
-      <p className="truncate text-xs font-semibold uppercase tracking-wider text-text-secondary" title={card.label}>
+      <p className="truncate text-[11px] font-semibold uppercase tracking-[0.06em] text-text-3" title={card.label}>
         {card.label}
       </p>
-      <p className="mt-3 text-2xl font-bold tabular-nums text-white">{value}</p>
+      <p className="mt-1 text-[28px] font-semibold leading-tight tabular-nums text-text-1">{value}</p>
       {card.change ? (
-        <p className={`mt-2 flex items-center gap-1 text-sm font-medium ${dir.className}`}>
+        <p className={`mt-1 flex items-center gap-1 text-[13px] font-medium ${dir.className}`}>
           <span aria-hidden="true">{dir.arrow}</span>
           <span>{card.change}</span>
         </p>
@@ -79,7 +79,7 @@ export default function KPIStrip({ cards }) {
   const items = cards || []
   if (!items.length) return null
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
       {items.map((card, index) => (
         <KpiCard key={`${card.label}-${index}`} card={card} index={index} />
       ))}

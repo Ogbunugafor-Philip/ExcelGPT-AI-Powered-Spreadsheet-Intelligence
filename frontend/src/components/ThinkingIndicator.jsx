@@ -18,13 +18,13 @@ export default function ThinkingIndicator() {
   }, [])
 
   return (
-    <div className="eg-anim-slide-up max-w-2xl rounded-2xl border border-border bg-card px-6 py-5">
+    <div className="eg-anim-slide-up mb-8 flex flex-col gap-2">
       <div className="flex items-center gap-1.5">
         <span className="eg-dot" />
         <span className="eg-dot" />
         <span className="eg-dot" />
       </div>
-      <p key={index} className="eg-anim-slide-up mt-3 text-small text-text-muted">
+      <p key={index} className="eg-anim-slide-up text-[13px] text-text-3">
         {MESSAGES[index]}
       </p>
     </div>

@@ -59,6 +59,7 @@ from services.intent_engine import IntentEngine, IntentEngineError
 from services.modules.common import format_naira, format_pct, is_currency_column
 from services.semantics import suggest_display_name
 from services.session_manager import SessionManager
+from services.sheets.analysis_sheet import clean_formula
 from services.sheets.styles import column_name, detect_type
 
 app = FastAPI(
@@ -264,7 +265,7 @@ def _build_preview(output: ComputationOutput) -> ReportPreview:
     ]
 
     metrics = [
-        MetricPreview(label=m.label, value=m.value, formula_used=m.formula_used)
+        MetricPreview(label=m.label, value=m.value, formula_used=clean_formula(m.formula_used))
         for m in output.analysis_sheet.metrics
     ]
     rankings, rankings_meta = _rankings_preview(output.analysis_sheet.rankings, display)

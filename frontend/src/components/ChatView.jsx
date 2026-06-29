@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Download, FileSpreadsheet, RefreshCw } from 'lucide-react'
+import { Download, FileSpreadsheet } from 'lucide-react'
 import ChatExchange from './ChatExchange'
 import ThinkingIndicator from './ThinkingIndicator'
 import ChatInputBar from './ChatInputBar'
@@ -35,55 +35,56 @@ export default function ChatView({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-base text-text-primary">
-      {/* LEFT PANEL */}
-      <aside className="hidden w-[300px] shrink-0 flex-col border-r border-border bg-card md:flex">
-        <div className="border-b border-border px-5 py-4">
+    <div className="flex h-screen overflow-hidden bg-base text-text-1">
+      {/* LEFT PANEL — color separation only, no hard border. */}
+      <aside className="hidden w-[280px] shrink-0 flex-col bg-sidebar md:flex">
+        <div className="px-5 pb-2 pt-5">
           <span className="font-display text-lg font-extrabold">
-            <span className="text-text-primary">Excel</span>
+            <span className="text-text-1">Excel</span>
             <span className="text-coral">GPT</span>
           </span>
         </div>
 
-        {/* File info */}
-        <div className="border-b border-border px-5 py-4">
+        {/* File card — no border, no chrome. */}
+        <div className="px-4 pt-4">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-coral/15 text-coral">
-              <FileSpreadsheet className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate font-semibold text-text-primary" title={file?.name}>{file?.name}</p>
-              <p className="mt-0.5 text-micro text-text-muted">
+            <FileSpreadsheet className="mt-0.5 h-5 w-5 shrink-0 text-coral" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-text-1" title={file?.name}>
+                {file?.name}
+              </p>
+              <p className="mt-0.5 text-[11px] text-text-3">
                 {(file?.rowCount || 0).toLocaleString()} rows · {file?.sheetCount || 0} sheet
                 {file?.sheetCount === 1 ? '' : 's'}
               </p>
+              <button
+                type="button"
+                onClick={handleChangeFile}
+                className="mt-1.5 text-[12px] font-medium text-coral transition hover:text-coral-light"
+              >
+                Change file
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleChangeFile}
-            className="mt-3 inline-flex items-center gap-1.5 text-small font-semibold text-coral transition hover:text-coral-light"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Change File
-          </button>
         </div>
 
         {/* Question history */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="mt-2 flex-1 overflow-y-auto pb-4">
           {chatHistory.length ? (
-            <p className="mb-3 text-micro uppercase tracking-wider text-text-muted">Your questions</p>
+            <p className="mb-1 mt-6 px-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-3">
+              History
+            </p>
           ) : null}
-          <ul className="space-y-2">
+          <ul>
             {chatHistory.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
                   onClick={() => scrollToExchange(item.id)}
-                  className="w-full truncate rounded-lg border-l-2 border-l-coral bg-base px-3 py-2 text-left text-small text-text-primary transition hover:bg-hover"
+                  className="group flex w-full items-center border-l-2 border-l-transparent px-4 py-2 text-left text-[13px] text-text-2 transition hover:border-l-coral hover:bg-card"
                   title={item.question}
                 >
-                  {item.question}
+                  <span className="truncate">{item.question}</span>
                 </button>
               </li>
             ))}
@@ -92,34 +93,38 @@ export default function ChatView({
 
         {/* Download All */}
         {canDownloadAll ? (
-          <div className="border-t border-border p-4">
+          <div className="p-4">
             <button
               type="button"
               onClick={() => onDownloadAll?.(answeredTokens)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-coral px-4 py-2.5 text-small font-semibold text-white transition hover:bg-coral-dark hover:shadow-glow-coral"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-coral text-[13px] font-semibold text-white transition hover:bg-coral-600 hover:shadow-glow-coral"
             >
               <Download className="h-4 w-4" />
-              Download All ({answeredTokens.length} insights)
+              Download All ({answeredTokens.length})
             </button>
           </div>
         ) : null}
       </aside>
 
       {/* RIGHT PANEL */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col bg-base">
         {/* Mobile brand + change-file row (left panel is hidden on small screens) */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
           <span className="font-display text-base font-extrabold">
-            <span className="text-text-primary">Excel</span>
+            <span className="text-text-1">Excel</span>
             <span className="text-coral">GPT</span>
           </span>
-          <button type="button" onClick={handleChangeFile} className="inline-flex items-center gap-1.5 text-small font-semibold text-coral">
-            <RefreshCw className="h-3.5 w-3.5" /> Change
+          <button
+            type="button"
+            onClick={handleChangeFile}
+            className="text-[13px] font-medium text-coral"
+          >
+            Change file
           </button>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-          <div className="mx-auto max-w-3xl space-y-8">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-8 sm:px-10">
+          <div className="mx-auto max-w-[900px]">
             {chatHistory.map((item) => (
               <ChatExchange key={item.id} item={item} onDownload={onDownloadOne} />
             ))}

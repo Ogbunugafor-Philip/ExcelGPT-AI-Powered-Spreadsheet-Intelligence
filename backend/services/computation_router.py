@@ -7,6 +7,8 @@ The Cerebras action plan describes *intent*; this layer does all the maths.
 
 from __future__ import annotations
 
+import difflib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,8 @@ from .modules.growth import GrowthModule
 from .modules.scoring import ScoringModule
 from .modules.statistical import StatisticalModule
 from .output_packager import OutputPackager
+
+log = logging.getLogger("excelgpt.router")
 
 # operation_type -> module attribute name
 OPERATION_MAP = {
@@ -78,6 +82,12 @@ class ComputationRouter:
             return []
         rank = next((r for r in results if r.get("operation_type") == "rank" and r.get("rows")), None)
         if not rank:
+            # No ranking, but a grouped roll-up (e.g. regional group_sum) still
+            # deserves a chart — built from the AGGREGATED result rows, never the
+            # raw 50k-row frame.
+            group = next((r for r in results if r.get("operation_type") in ("group_sum", "group_avg") and r.get("rows")), None)
+            if group:
+                return self._group_charts(group, charts_dir)
             return []
         cols = rank.get("columns", [])
         rows = rank.get("rows", [])
@@ -127,6 +137,39 @@ class ComputationRouter:
 
         return [c for c in charts if c and c.get("image_path")]
 
+    def _group_charts(self, group: dict[str, Any], charts_dir) -> list[dict[str, Any]]:
+        """Horizontal bar chart of a grouped roll-up, fed the AGGREGATED rows
+        (one per group), so a regional question charts Region → Deposits."""
+        cols = group.get("columns", []) or []
+        rows = group.get("rows", []) or []
+        value_cols = group.get("value_columns", []) or []
+        if not cols or not rows or not value_cols:
+            return []
+
+        # First non-value column is the group dimension (e.g. Region).
+        value_set = set(value_cols)
+        group_col = next((c for c in cols if c not in value_set), cols[0])
+        value_col = value_cols[0]
+        if group_col not in cols or value_col not in cols:
+            return []
+        g_i, v_i = cols.index(group_col), cols.index(value_col)
+
+        groups = [r[g_i] for r in rows if g_i < len(r)]
+        values = [r[v_i] for r in rows if v_i < len(r)]
+        if not groups:
+            return []
+
+        df = pd.DataFrame({group_col: groups, value_col: values})
+        label = group.get("label") or f"{value_col} by {group_col}"
+        op = Operation(
+            operation_id="auto_chart_group", operation_type="chart", target_sheet="",
+            target_columns=[group_col, value_col], group_by=[],
+            parameters={"chart_type": "bar", "x": group_col, "y": value_col, "top_n": len(groups)},
+            output_sheet="charts", output_label=label,
+        )
+        chart = self.chart.execute(op, df, str(charts_dir))
+        return [chart] if chart and chart.get("image_path") else []
+
     # -- internals ----------------------------------------------------------
 
     def _execute_one(self, operation: Operation, sheets, charts_dir) -> dict[str, Any] | None:
@@ -140,6 +183,7 @@ class ComputationRouter:
             }
 
         df = self._select_sheet(operation, sheets)
+        self._remap_columns(operation, df)
         try:
             if module_name == "chart":
                 return self.chart.execute(operation, df, str(charts_dir))
@@ -152,6 +196,45 @@ class ComputationRouter:
                 "label": operation.output_label,
                 "warnings": [f"Operation failed: {exc}"],
             }
+
+    def _remap_columns(self, operation: Operation, df: pd.DataFrame) -> None:
+        """Repair group_by / target_columns that don't exactly match the frame.
+
+        Cerebras (or a fuzzy header) can hand us 'Region ' or 'regions' when the
+        column is 'Region'. Rather than silently dropping it — which is how a
+        regional group_sum degrades into a meaningless date ranking — we snap each
+        missing column to its closest real column name. Exact and case-insensitive
+        matches are preferred; difflib handles the near-misses.
+        """
+        if df is None or df.empty:
+            return
+        available = [str(c) for c in df.columns]
+        lower_map = {c.lower(): c for c in available}
+
+        def closest(col: str) -> str | None:
+            if col in available:
+                return col
+            hit = lower_map.get(str(col).lower())
+            if hit:
+                return hit
+            matches = difflib.get_close_matches(str(col), available, n=1, cutoff=0.6)
+            return matches[0] if matches else None
+
+        def remap_list(name: str, values: list[str]) -> None:
+            fixed: list[str] = []
+            for col in values:
+                match = closest(col)
+                if match is None:
+                    fixed.append(col)  # leave it; the module will warn/skip
+                    continue
+                if match != col:
+                    log.info("Remapped %s '%s' to '%s'", name, col, match)
+                    print(f"[router] Remapped {name} '{col}' to '{match}'")
+                fixed.append(match)
+            values[:] = fixed
+
+        remap_list("group_by", operation.group_by)
+        remap_list("target_columns", operation.target_columns)
 
     def _select_sheet(self, operation: Operation, sheets: dict[str, pd.DataFrame]) -> pd.DataFrame:
         if not sheets:

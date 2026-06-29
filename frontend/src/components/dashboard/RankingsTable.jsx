@@ -1,35 +1,44 @@
 // Rich performance-rankings table. Column headers use the ACTUAL data display
-// names (from rankings_meta), rows carry medal badges, change indicators, and a
-// performance tier badge derived server-side from each value vs. the mean.
+// names (from rankings_meta), rows carry rank indicators, change arrows, and a
+// performance tier pill derived server-side from each value vs. the mean.
 
 const ARROWS = {
-  up: { glyph: '↑', className: 'text-emerald' },
-  down: { glyph: '↓', className: 'text-red-alert' },
-  neutral: { glyph: '→', className: 'text-amber' },
+  up: { glyph: '↑', className: 'text-positive' },
+  down: { glyph: '↓', className: 'text-negative' },
+  neutral: { glyph: '→', className: 'text-warning' },
 }
 
-// Medal styling for the top three; everyone else gets a neutral chip.
-const MEDAL_BADGE = {
-  1: 'bg-gold/20 text-gold',
-  2: 'bg-gray-300/20 text-gray-200',
-  3: 'bg-[#B45309]/25 text-[#D9A066]',
-}
-const MEDAL_BORDER = {
-  1: 'border-l-4 border-l-gold',
-  2: 'border-l-4 border-l-gray-300',
-  3: 'border-l-4 border-l-[#B45309]',
-}
-
+// Performance tiers map the existing server keys to the new pill language.
 const TIER = {
-  excellent: { label: 'Excellent', className: 'bg-emerald/15 text-emerald' },
-  good: { label: 'Good', className: 'bg-blue-electric/15 text-blue-glow' },
-  average: { label: 'Average', className: 'bg-amber/15 text-amber' },
-  below: { label: 'Below Target', className: 'bg-red-alert/15 text-red-alert' },
+  excellent: { label: 'Elite', className: 'bg-gold/20 text-gold' },
+  good: { label: 'On Track', className: 'bg-positive/15 text-positive' },
+  average: { label: 'At Risk', className: 'bg-warning/15 text-warning' },
+  below: { label: 'Below Target', className: 'bg-negative/15 text-negative' },
+}
+
+// Rank cell: #1 gold dot + bold, #2/#3 a muted dot, others a plain muted number.
+function RankCell({ rank }) {
+  if (rank === 1) {
+    return (
+      <span className="inline-flex items-center gap-2 font-bold text-text-1">
+        <span className="h-2 w-2 rounded-full bg-gold" />1
+      </span>
+    )
+  }
+  if (rank === 2 || rank === 3) {
+    return (
+      <span className="inline-flex items-center gap-2 text-text-2">
+        <span className="h-2 w-2 rounded-full bg-text-2" />
+        {rank}
+      </span>
+    )
+  }
+  return <span className="text-text-3">{rank ?? '—'}</span>
 }
 
 export default function RankingsTable({ rows, meta }) {
   const data = rows || []
-  if (!data.length) return <p className="text-sm text-text-secondary">No rankings available.</p>
+  if (!data.length) return <p className="text-[14px] text-text-2">No rankings available.</p>
 
   const entityLabel = meta?.entity_label || 'Entity'
   const valueLabel = meta?.value_label || 'Value'
@@ -39,9 +48,9 @@ export default function RankingsTable({ rows, meta }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse text-sm">
+      <table className="min-w-full border-collapse">
         <thead>
-          <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-text-secondary">
+          <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-text-3">
             <th className="px-3 py-2.5 font-semibold">Rank</th>
             <th className="px-3 py-2.5 font-semibold">{entityLabel}</th>
             <th className="px-3 py-2.5 text-right font-semibold">{valueLabel}</th>
@@ -52,20 +61,18 @@ export default function RankingsTable({ rows, meta }) {
         <tbody>
           {data.map((row, index) => {
             const arrow = ARROWS[row.direction] || ARROWS.neutral
-            const badge = MEDAL_BADGE[row.rank] || 'bg-white/5 text-text-secondary'
             const tier = TIER[row.tier]
+            const isLast = index === data.length - 1
             return (
               <tr
                 key={`${row.label}-${index}`}
-                className={`group border-b border-white/5 transition hover:bg-white/5 ${MEDAL_BORDER[row.rank] || ''}`}
+                className={`text-[14px] transition hover:bg-card-hover ${isLast ? '' : 'border-b border-border'}`}
               >
                 <td className="px-3 py-3">
-                  <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${badge}`}>
-                    {row.rank ?? '—'}
-                  </span>
+                  <RankCell rank={row.rank} />
                 </td>
-                <td className="px-3 py-3 font-medium text-white">{row.label || '—'}</td>
-                <td className="px-3 py-3 text-right font-semibold tabular-nums text-white">{row.value}</td>
+                <td className="px-3 py-3 text-text-1">{row.label || '—'}</td>
+                <td className="px-3 py-3 text-right font-semibold tabular-nums text-text-1">{row.value}</td>
                 {hasChange ? (
                   <td className={`px-3 py-3 text-right font-medium tabular-nums ${arrow.className}`}>
                     {row.change ? (
@@ -81,7 +88,7 @@ export default function RankingsTable({ rows, meta }) {
                 {hasTier ? (
                   <td className="px-3 py-3 text-center">
                     {tier ? (
-                      <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${tier.className}`}>
+                      <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold ${tier.className}`}>
                         {tier.label}
                       </span>
                     ) : null}

@@ -17,29 +17,48 @@
   --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* Surfaces */
-  --bg-primary: #0f0f0f;
-  --bg-card: #1a1a1a;
-  --bg-input: #242424;
-  --bg-hover: #2a2a2a;
+  /* Surfaces — near-black ladder with subtle depth. */
+  --bg-base: #0c0c0e;
+  --bg-surface: #141416;
+  --bg-card: #1c1c1f;
+  --bg-card-hover: #222226;
+  --bg-sidebar: #111113;
+  --bg-primary: #0c0c0e; /* legacy alias */
+  --bg-input: #1c1c1f;
+  --bg-hover: #222226;
 
   /* Accents */
-  --coral: #ff6b6b;
-  --coral-dark: #e8545a;
+  --coral: #ff5c5c;
+  --coral-600: #e04444;
+  --coral-dark: #e04444; /* legacy alias */
   --coral-light: #ff8e8e;
-  --teal: #4ecdc4;
-  --amber: #ffb347;
-  --red-alert: #ff4757;
-  --gold: #ffd700;
+  --coral-glow: rgba(255, 92, 92, 0.15);
+
+  /* Semantic */
+  --positive: #34d399;
+  --positive-bg: rgba(52, 211, 153, 0.12);
+  --negative: #f87171;
+  --negative-bg: rgba(248, 113, 113, 0.12);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.12);
+  --gold: #f59e0b;
+  --gold-bg: rgba(245, 158, 11, 0.16);
+  --teal: #34d399; /* legacy alias -> positive */
+  --amber: #fbbf24; /* legacy alias -> warning */
+  --red-alert: #f87171; /* legacy alias -> negative */
 
   /* Text */
-  --text-primary: #f7f7f7;
-  --text-secondary: #a0a0a0;
-  --text-muted: #606060;
+  --text-1: #ffffff;
+  --text-2: #a1a1aa;
+  --text-3: #52525b;
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --glow-coral: 0 0 20px rgba(255, 107, 107, 0.3);
-  --glow-teal: 0 0 20px rgba(78, 205, 196, 0.3);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --glow-coral: 0 0 0 1px rgba(255, 92, 92, 0.4), 0 0 24px rgba(255, 92, 92, 0.18);
+  --glow-teal: 0 0 20px rgba(52, 211, 153, 0.25);
 
   /* Legacy aliases so older components keep working on the new palette */
   --navy: var(--bg-primary);
@@ -55,7 +74,9 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.875rem;
   --radius-xl: 1.25rem;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-coral: 0 0 0 1px rgba(255, 92, 92, 0.5), 0 0 20px rgba(255, 92, 92, 0.15);
   --shadow-glow: var(--glow-coral);
 }
 
@@ -81,8 +102,8 @@ html {
 
   body {
     margin: 0;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    background-color: var(--bg-base);
+    color: var(--text-1);
     font-family: var(--font-body);
     font-size: 1rem;
     line-height: 1.5;
@@ -97,28 +118,28 @@ html {
 
   ::selection {
     background: var(--coral);
-    color: #0f0f0f;
+    color: #0c0c0e;
   }
 }
 
 /* Custom scrollbar — thin, dark track, coral thumb. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--coral) var(--bg-card);
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-track {
-  background: var(--bg-card);
+  background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--coral-dark);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 9999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--coral);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* ---------------------------------------------------------------------------
@@ -208,8 +229,8 @@ html {
 .eg-anim-coral-pulse { animation: eg-coral-pulse 1.4s ease-in-out infinite; }
 
 .eg-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 9999px;
   background: var(--coral);
   animation: eg-dot-bounce 1.2s infinite ease-in-out both;

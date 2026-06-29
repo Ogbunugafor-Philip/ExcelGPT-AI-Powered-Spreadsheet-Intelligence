@@ -51,6 +51,7 @@ _ABBREVIATIONS: dict[str, str] = {
     "id": "ID",
     "lga": "LGA",
     "fso": "FSO",
+    "ch": "CH",
     "dsa": "DSA",
     "kpi": "KPI",
     "roi": "ROI",
@@ -88,6 +89,29 @@ _PHRASE_TOKENS: dict[str, str] = {
 _SPLIT_RE = re.compile(r"[\s_\-/.]+")
 _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
+# Small connector words kept lowercase when they appear mid-label
+# ("Day_of_Week" -> "Day of Week", not "Day Of Week").
+_LOWER_WORDS: frozenset[str] = frozenset(
+    {"of", "the", "and", "per", "to", "vs", "by", "for", "in", "on", "a", "an", "or"}
+)
+
+# Exact (case-insensitive) raw-name overrides for headers whose clean form a
+# generic tokeniser cannot infer (acronym + reordered words + unit suffix).
+# Checked before tokenisation so these always render exactly as intended and
+# NEVER leak underscores to a user-facing sheet.
+_EXACT_OVERRIDES: dict[str, str] = {
+    "ch_monthly_target_accounts": "CH Target (Accounts)",
+    "ch_monthly_target": "CH Target (₦)",
+    "fso_monthly_target": "FSO Target (₦)",
+    "fso_monthly_target_accounts": "FSO Target (Accounts)",
+    "fso_id": "FSO ID",
+    "ch_id": "CH ID",
+    "cluster_head": "Cluster Head",
+    "cluster_head_id": "Cluster Head ID",
+    "accounts_opened": "Accounts Opened",
+    "day_of_week": "Day of Week",
+}
+
 
 def _raw_name(name: Any) -> str:
     if isinstance(name, dict):
@@ -118,6 +142,11 @@ def suggest_display_name(column_name: Any) -> str:
     if not raw:
         return ""
 
+    # Exact override wins — guarantees a clean, underscore-free label.
+    override = _EXACT_OVERRIDES.get(raw.lower())
+    if override:
+        return override
+
     tokens = _tokenize(raw)
     if not tokens:
         return raw
@@ -129,7 +158,7 @@ def suggest_display_name(column_name: Any) -> str:
         tokens = tokens[:-1]
 
     words: list[str] = []
-    for token in tokens:
+    for index, token in enumerate(tokens):
         lower = token.lower()
         if lower in _PHRASE_TOKENS:
             words.append(_PHRASE_TOKENS[lower])
@@ -137,6 +166,8 @@ def suggest_display_name(column_name: Any) -> str:
             words.append(_ABBREVIATIONS[lower])
         elif lower in _CURRENCY_TOKENS:
             words.append(_CURRENCY_TOKENS[lower])
+        elif index > 0 and lower in _LOWER_WORDS:
+            words.append(lower)  # keep connector words lowercase mid-label
         elif token.isupper() and len(token) <= 5:
             words.append(token)  # preserve already-uppercase acronyms
         else:

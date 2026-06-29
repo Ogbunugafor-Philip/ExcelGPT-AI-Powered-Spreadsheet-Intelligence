@@ -144,6 +144,23 @@ Semantic-driven planning — infer the analysis the data supports, don't wait to
 - entity_identifier/category_dimension + a metric  -> ALSO add a rank operation (top performers).
 - target_metric + actual_metric present            -> ALSO add a variance operation.
 - geographic_dimension present                      -> ALSO add a group_sum by that geography.
+
+Regional / geographic questions — READ THIS CAREFULLY:
+- When the user asks about "regional performance", "zone performance", "performance \
+by region/zone/state", or any geographic breakdown, the PRIMARY operation MUST be \
+group_sum grouped by that geographic column (Region / State / Zone). NEVER answer a \
+regional question with a rank by Date or a date-based/time-series operation — a list \
+of dates is the wrong answer to "by region".
+- Phrases like "customer onboarding", "accounts opened", "account opening", or \
+"new customers" refer to the accounts-opened count column — INCLUDE that column in \
+target_columns alongside the money metric.
+- Example — "regional performance by deposits and customer onboarding" MUST produce:
+    operation_type: group_sum
+    group_by: [<the Region column's raw name>]
+    target_columns: [<deposits raw name>, <accounts-opened raw name>]
+    output_sheet: data
+    output_label: "Regional Performance — Deposits and Accounts Opened"
+  plus a bar chart of deposits by region. Do NOT add a rank-by-date operation for it.
 - For every analysis, ALSO add a chart operation that visualises the primary result \
 (bar for rankings/category breakdowns, line for time series, pie for share-of-total).
 - ALWAYS produce an executive_summary: include "executive_summary" in \
@@ -279,6 +296,19 @@ class IntentEngine:
 
     # -- rule-based fallback (Tier 3) ---------------------------------------
 
+    @staticmethod
+    def _plural_noun(word: str) -> str:
+        """Light pluralisation for chart titles: Region -> Regions, Branch -> Branches."""
+        text = str(word or "").strip()
+        if not text:
+            return "Entities"
+        lowered = text.lower()
+        if lowered.endswith("y") and not lowered.endswith(("ay", "ey", "oy", "uy")):
+            return text[:-1] + "ies"
+        if lowered.endswith(("s", "x", "z", "ch", "sh")):
+            return text + "es"
+        return text + "s"
+
     def _rule_based_fallback(self, brief: dict[str, Any], instruction: str) -> ActionPlan:
         """Build a complete ActionPlan using only Python keyword detection.
 
@@ -361,6 +391,24 @@ class IntentEngine:
         want_variance = any(k in instr for k in ["target", "attainment", "variance", "below", "above", "watchlist", "recognition"])
         want_chart = True  # always add a chart
 
+        # Explicit geographic detection — a regional/zone/state question is a
+        # group_sum BY that geography, NEVER a rank or date-based operation. This
+        # also picks the dimension the summary chart should visualise so we don't
+        # chart FSOs for a question that asked about regions.
+        if want_region and region_col:
+            primary_group_col, primary_group_noun = region_col, "Region"
+        elif want_state and state_col:
+            primary_group_col, primary_group_noun = state_col, clean_label(state_col) or "State"
+        elif want_cluster and cluster_head_col:
+            primary_group_col, primary_group_noun = cluster_head_col, "Cluster Head"
+        else:
+            primary_group_col, primary_group_noun = entity_col, entity_noun
+        # A pure geographic question (no explicit FSO leaderboard ask) should lead
+        # with the geographic roll-up, not an FSO ranking.
+        geographic_primary = bool(
+            (want_region and region_col) or (want_state and state_col)
+        ) and not any(k in instr for k in ["fso", "leaderboard", "officer", "rank all"])
+
         # Step 4 — build operations.
         operations: list[Operation] = []
         op_num = 1
@@ -382,12 +430,14 @@ class IntentEngine:
                     output_sheet="data", output_label=f"{entity_noun} Leaderboard — Ranked by {clean_label(primary_value)}"))
                 op_num += 1
 
-            # Op 2 — Regional Scorecard.
+            # Op 2 — Regional Scorecard (group_sum BY Region — never rank by date).
             if want_region and region_col:
+                label = ("Regional Performance — Deposits and Accounts Opened"
+                         if primary_count else "Regional Performance Scorecard")
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
                     target_columns=value_targets(), group_by=[region_col], parameters={},
-                    output_sheet="analysis", output_label="Regional Performance Scorecard"))
+                    output_sheet="data" if geographic_primary else "analysis", output_label=label))
                 op_num += 1
 
             # Op 3 — State Performance.
@@ -424,13 +474,15 @@ class IntentEngine:
                     output_sheet="analysis", output_label=f"{entity_noun} Attainment vs Target"))
                 op_num += 1
 
-            # Op 7 — Chart of the top performers.
+            # Op 7 — Chart of the primary dimension (region for a regional Q, FSO
+            # for a leaderboard) by the money metric.
             if want_chart:
+                chart_noun = self._plural_noun(primary_group_noun)
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="chart", target_sheet=first_sheet,
-                    target_columns=[primary_value], group_by=[entity_col],
-                    parameters={"chart_type": "bar", "top_n": 10, "x": entity_col, "y": primary_value},
-                    output_sheet="charts", output_label=f"Top 10 {entity_noun}s by {clean_label(primary_value)}"))
+                    target_columns=[primary_value], group_by=[primary_group_col],
+                    parameters={"chart_type": "bar", "top_n": 10, "x": primary_group_col, "y": primary_value},
+                    output_sheet="charts", output_label=f"Top 10 {chart_noun} by {clean_label(primary_value)}"))
                 op_num += 1
 
         # Step 5 — safe default when nothing was detected.

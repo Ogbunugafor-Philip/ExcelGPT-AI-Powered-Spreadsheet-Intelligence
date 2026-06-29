@@ -5,25 +5,41 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Surfaces
-        base: '#0F0F0F', // near-black app background
-        card: '#1A1A1A', // card background
-        input: '#242424', // input background
-        hover: '#2A2A2A', // hover state
+        // Surfaces — refreshed near-black ladder with subtle depth.
+        base: '#0C0C0E', // near-black app background
+        surface: '#141416', // raised surface (KPI cards)
+        card: '#1C1C1F', // card background
+        'card-hover': '#222226', // card hover state
+        sidebar: '#111113', // sidebar background
+        input: '#1C1C1F', // input background
+        hover: '#222226', // hover state
 
         // Accents
-        coral: '#FF6B6B', // primary accent — coral red
-        'coral-dark': '#E8545A', // coral hover
+        coral: '#FF5C5C', // primary accent — coral red
+        'coral-600': '#E04444', // coral hover
+        'coral-dark': '#E04444', // legacy alias for hover
         'coral-light': '#FF8E8E', // coral glow
-        teal: '#4ECDC4', // success / positive
-        amber: '#FFB347', // warning / neutral
-        'red-alert': '#FF4757', // danger / negative
-        gold: '#FFD700', // rank 1 / elite
+
+        // Semantic
+        positive: '#34D399', // positive / up
+        negative: '#F87171', // negative / down
+        warning: '#FBBF24', // warning / at risk
+        gold: '#F59E0B', // elite / rank 1
+        teal: '#34D399', // success / positive (remapped to positive green)
+        amber: '#FBBF24', // warning / neutral
+        'red-alert': '#F87171', // danger / negative
 
         // Text
-        'text-primary': '#F7F7F7',
-        'text-secondary': '#A0A0A0',
-        'text-muted': '#606060',
+        'text-1': '#FFFFFF',
+        'text-2': '#A1A1AA',
+        'text-3': '#52525B',
+        'text-primary': '#FFFFFF',
+        'text-secondary': '#A1A1AA',
+        'text-muted': '#52525B',
+
+        // Borders as named colors (so `border-border` / `border-strong` work).
+        border: 'rgba(255,255,255,0.06)',
+        'border-strong': 'rgba(255,255,255,0.12)',
 
         // Legacy token names remapped to the new palette so any older class
         // still renders on-theme (no navy / electric-blue anywhere).
@@ -39,10 +55,16 @@ export default {
         display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        'glow-coral': '0 0 20px rgba(255,107,107,0.3)',
-        'glow-teal': '0 0 20px rgba(78,205,196,0.3)',
-        glow: '0 0 20px rgba(255,107,107,0.3)', // legacy alias
-        card: '0 1px 2px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.35)',
+        'glow-coral': '0 0 0 1px rgba(255,92,92,0.4), 0 0 24px rgba(255,92,92,0.18)',
+        'glow-teal': '0 0 20px rgba(52,211,153,0.25)',
+        glow: '0 0 24px rgba(255,92,92,0.18)', // legacy alias
+        card: '0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3)',
+        elevated: '0 2px 4px rgba(0,0,0,0.5), 0 12px 32px rgba(0,0,0,0.4)',
+        coral: '0 0 0 1px rgba(255,92,92,0.5), 0 0 20px rgba(255,92,92,0.15)',
+      },
+      borderColor: {
+        DEFAULT: 'rgba(255,255,255,0.06)',
+        strong: 'rgba(255,255,255,0.12)',
       },
       borderRadius: {
         xl: '0.875rem',

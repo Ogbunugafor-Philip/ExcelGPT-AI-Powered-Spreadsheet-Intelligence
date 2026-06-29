@@ -92,8 +92,15 @@ class ChartGenerator:
             "warnings": [],
         }
 
+        # Diagnostics — print on every chart attempt so an empty Charts sheet is
+        # always traceable to a real cause (bad df, missing path, blank file).
+        print(f"[CHART] Generating: {operation.output_label}")
+        print(f"[CHART] DataFrame shape: {df.shape}")
+        print(f"[CHART] Columns: {list(df.columns)}")
+
         if df.empty:
             result["warnings"].append("Empty dataframe — no chart rendered.")
+            print("[CHART] Skipped: empty dataframe")
             return result
 
         x_col, y_col = self._resolve_axes(operation, df, chart_type, result)
@@ -116,6 +123,7 @@ class ChartGenerator:
         output_dir = os.path.abspath(output_dir)
         os.makedirs(output_dir, exist_ok=True)
         image_path = os.path.join(output_dir, f"{operation.operation_id}.png")
+        print(f"[CHART] Output path: {image_path}")
 
         try:
             diverging = bool(params.get("diverging"))
@@ -128,6 +136,8 @@ class ChartGenerator:
             if file_size < 1000:
                 raise RuntimeError(f"Chart file too small ({file_size} bytes), likely empty: {image_path}")
             print(f"[chart_generator] Saved chart: {image_path} ({file_size:,} bytes)")
+            print(f"[CHART] File exists: {os.path.exists(image_path)}")
+            print(f"[CHART] File size: {file_size if os.path.exists(image_path) else 'MISSING'}")
             result["image_path"] = image_path  # absolute path for openpyxl embedding
             result["recharts_data"] = recharts
         except Exception as exc:  # noqa: BLE001 — a chart failure must not abort the report
