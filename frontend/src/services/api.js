@@ -2,7 +2,10 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8003',
-  timeout: 120000,
+  // 100s: the backend's 3-tier planner worst case (~81s) finishes well before
+  // this, so the rule-based fallback always reaches the user instead of the
+  // browser cancelling the request mid-flight.
+  timeout: 100000,
 })
 
 // Map an axios error to one of our friendly ERROR_MESSAGES keys (see

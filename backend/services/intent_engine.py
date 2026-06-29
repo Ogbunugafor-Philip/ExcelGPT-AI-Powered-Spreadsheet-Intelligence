@@ -518,6 +518,9 @@ class IntentEngine:
                 response_format={"type": "json_object"},
                 temperature=config.CEREBRAS_TEMPERATURE,
                 max_completion_tokens=config.CEREBRAS_MAX_TOKENS,
+                # Per-call cap (40s) so each of Tier 1 / Tier 2 is bounded even if
+                # the shared client was built with a different default.
+                timeout=config.CEREBRAS_TIMEOUT_SECONDS,
             )
         except IntentEngineError:
             raise

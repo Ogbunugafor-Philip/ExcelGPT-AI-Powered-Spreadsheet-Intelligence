@@ -18,11 +18,13 @@ load_dotenv(override=True)
 # ---------------------------------------------------------------------------
 CEREBRAS_API_KEY: str = os.getenv("CEREBRAS_API_KEY", "")
 CEREBRAS_MODEL: str = os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")
-# Tier-1 generous budget so a long, complex instruction does not time out.
-# CEREBRAS_TIMEOUT is the documented alias; CEREBRAS_TIMEOUT_SECONDS is what the
-# client actually uses (either may be set in .env).
+# Per-tier Cerebras timeout. Capped at 40s so the 3-tier worst case
+# (Tier 1 40s + Tier 2 40s + <1s rule-based fallback ≈ 81s) returns before the
+# frontend's 100s axios timeout cancels the request — the fallback always reaches
+# the user. CEREBRAS_TIMEOUT is the documented alias; CEREBRAS_TIMEOUT_SECONDS is
+# what the client actually uses (either may be set in .env).
 CEREBRAS_TIMEOUT_SECONDS: float = float(
-    os.getenv("CEREBRAS_TIMEOUT_SECONDS") or os.getenv("CEREBRAS_TIMEOUT") or "90"
+    os.getenv("CEREBRAS_TIMEOUT_SECONDS") or os.getenv("CEREBRAS_TIMEOUT") or "40"
 )
 CEREBRAS_TEMPERATURE: float = float(os.getenv("CEREBRAS_TEMPERATURE", "0.1"))
 # Reasoning models (e.g. gpt-oss-120b) spend tokens on hidden reasoning before
