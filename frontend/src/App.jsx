@@ -4,7 +4,7 @@ import './index.css'
 import UploadZone from './components/UploadZone'
 import DataPreview from './components/DataPreview'
 import InstructionInput from './components/InstructionInput'
-import ProgressIndicator, { FallbackBanner } from './components/ProgressIndicator'
+import ProgressIndicator, { FallbackTopBanner } from './components/ProgressIndicator'
 import { downloadFile, refineReport } from './services/api'
 
 // Lazy-load the heavier post-analysis surfaces so the initial bundle stays lean.
@@ -44,6 +44,7 @@ export default function App() {
   const [reportPreview, setReportPreview] = useState(null)
   const [downloadToken, setDownloadToken] = useState(null)
   const [aiStatus, setAiStatus] = useState('cerebras') // 'cerebras' | 'fallback'
+  const [fallbackBannerVisible, setFallbackBannerVisible] = useState(false)
   const [version, setVersion] = useState(0)
   const [refinementHistory, setRefinementHistory] = useState([])
   const [refinementCount, setRefinementCount] = useState(0)
@@ -60,6 +61,20 @@ export default function App() {
     window.addEventListener('scroll', onScroll)
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  // Auto-dismiss the fixed fallback banner after 8 seconds.
+  useEffect(() => {
+    if (!fallbackBannerVisible) return undefined
+    const id = setTimeout(() => setFallbackBannerVisible(false), 8000)
+    return () => clearTimeout(id)
+  }, [fallbackBannerVisible])
+
+  // Surface the fixed top banner whenever a result comes back via the fallback.
+  const applyAiStatus = (status) => {
+    const next = status || 'cerebras'
+    setAiStatus(next)
+    if (next === 'fallback') setFallbackBannerVisible(true)
+  }
 
   // Drive the simulated step sequence while a single /analyse request is in flight.
   useEffect(() => {
@@ -94,6 +109,7 @@ export default function App() {
     setReportPreview(null)
     setDownloadToken(null)
     setAiStatus('cerebras')
+    setFallbackBannerVisible(false)
     setVersion(0)
     setRefinementHistory([])
     setRefinementCount(0)
@@ -103,6 +119,7 @@ export default function App() {
   const handleAnalyzeStart = () => {
     setProgressStep(1)
     setAiStatus('cerebras')
+    setFallbackBannerVisible(false)
     setAnalysing(true)
   }
 
@@ -112,7 +129,7 @@ export default function App() {
     setTimeout(() => {
       setReportPreview(data.preview)
       setDownloadToken(data.download_token)
-      setAiStatus(data.ai_status || 'cerebras')
+      applyAiStatus(data.ai_status)
       setVersion(data.version)
       setRefinementHistory([
         { role: 'user', content: instruction },
@@ -137,7 +154,7 @@ export default function App() {
       const data = await refineReport({ session_id: sessionId, feedback, history: priorHistory, current_version: version })
       setReportPreview(data.preview)
       setDownloadToken(data.download_token)
-      setAiStatus(data.ai_status || 'cerebras')
+      applyAiStatus(data.ai_status)
       setVersion(data.version)
       setRefinementHistory((prev) => [...prev, { role: 'assistant', content: summariseActionPlan(data.action_plan) }])
       setRefinementCount((count) => count + 1)
@@ -163,6 +180,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-navy text-text-primary">
+      {/* Fixed fallback banner — above the dashboard AND the download modal. */}
+      {fallbackBannerVisible ? (
+        <FallbackTopBanner onDismiss={() => setFallbackBannerVisible(false)} />
+      ) : null}
+
       {/* Fixed header */}
       <header
         className={`fixed inset-x-0 top-0 z-40 h-16 border-b border-border-subtle transition-shadow ${scrolled ? 'shadow-card' : ''}`}
@@ -212,7 +234,6 @@ export default function App() {
           <div className="flex flex-col gap-8 py-8">
             {showReport ? (
               <Suspense fallback={<Spinner />}>
-                {aiStatus === 'fallback' ? <FallbackBanner /> : null}
                 <PreviewPanel
                   preview={reportPreview}
                   downloadToken={downloadToken}
@@ -261,6 +282,7 @@ export default function App() {
             onDownload={handleConfirmedDownload}
             sheetCount={reportSheetCount}
             version={version}
+            aiStatus={aiStatus}
           />
         </Suspense>
       ) : null}

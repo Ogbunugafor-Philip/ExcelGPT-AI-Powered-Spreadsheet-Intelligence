@@ -300,37 +300,66 @@ class IntentEngine:
         def low(c: str) -> str:
             return str(c).lower()
 
-        entity_cols = [c for c in all_columns if any(
-            k in low(c) for k in ["fso name", "name", "branch", "agent", "staff", "officer"])]
-        region_col = next((c for c in all_columns if "region" in low(c)), None)
-        state_col = next((c for c in all_columns if "state" in low(c)), None)
-        cluster_col = next((c for c in all_columns if "cluster" in low(c) and "head" in low(c)), None)
+        def has(c: str, *keywords: str) -> bool:
+            return any(k in low(c) for k in keywords)
 
-        value_cols = [c for c in all_columns if any(
-            k in low(c) for k in ["deposit", "revenue", "amount", "sales", "collection"])]
-        primary_value = value_cols[0] if value_cols else (all_columns[-1] if all_columns else None)
+        def clean_label(c: Any) -> str:
+            """'Deposits (₦)' -> 'Deposits' for readable output labels."""
+            text = str(c)
+            cut = text.find(" (")
+            return (text[:cut] if cut != -1 else text).strip()
 
-        count_cols = [c for c in all_columns if any(
-            k in low(c) for k in ["account", "count", "number", "qty", "quantity", "opened"])]
-        primary_count = count_cols[0] if count_cols else None
+        targety = ("target", "budget", "plan", "quota")
 
-        target_cols = [c for c in all_columns if any(
-            k in low(c) for k in ["target", "budget", "plan", "quota"])]
+        # Value (money) columns — prefer deposits; never a target column. The "₦"
+        # hint catches naira columns even when the word "deposit" is absent.
+        deposit_like = [c for c in all_columns if has(c, "deposit", "revenue", "sales", "collection") and not has(c, *targety)]
+        money_like = [c for c in all_columns if "₦" in str(c) and not has(c, *targety)]
+        amount_like = [c for c in all_columns if has(c, "amount") and not has(c, *targety)]
+        value_cols = deposit_like or money_like or amount_like
+        # Pick the FSO-level value (Deposits), not a cluster-head metric.
+        primary_value = next((c for c in value_cols if "fso" not in low(c)), value_cols[0] if value_cols else None)
+        if primary_value is None:
+            primary_value = all_columns[-1] if all_columns else None
 
-        date_cols = [c for c in all_columns if any(
-            k in low(c) for k in ["date", "day", "month", "period", "week"])]
-        date_col = date_cols[0] if date_cols else None
+        # Count columns — accounts opened, never a target.
+        count_cols = [c for c in all_columns if has(c, "account", "count", "number", "opened", "qty") and not has(c, *targety)]
+        primary_count = next((c for c in count_cols if "target" not in low(c)), None)
+
+        # Entity — prefer FSO Name over FSO ID.
+        entity_cols = [c for c in all_columns if has(c, "fso name", "name", "branch", "agent", "staff", "officer")]
+        entity_col = next((c for c in entity_cols if "name" in low(c)), entity_cols[0] if entity_cols else None)
+
+        # Target — prefer the FSO-level naira target over the cluster-head target.
+        target_cols = [c for c in all_columns if has(c, *targety)]
+        fso_target = next((c for c in target_cols if "fso" in low(c) and "₦" in str(c)),
+                          next((c for c in target_cols if "fso" in low(c)),
+                               target_cols[0] if target_cols else None))
+
+        # Geographic hierarchy + date — exact column-name match first, then contains.
+        def exact_or_contains(token: str) -> str | None:
+            return (next((c for c in all_columns if low(c) == token), None)
+                    or next((c for c in all_columns if token in low(c)), None))
+
+        region_col = exact_or_contains("region")
+        state_col = exact_or_contains("state")
+        cluster_head_col = next((c for c in all_columns if "cluster head" in low(c)), None)
+        date_col = (next((c for c in all_columns if low(c) in ("date", "day")), None)
+                    or next((c for c in all_columns if has(c, "date")), None))
+
+        # A friendly noun for the ranked entity ("FSO" when the column is FSO-based).
+        entity_noun = "FSO" if (entity_col and "fso" in low(entity_col)) else (clean_label(entity_col) if entity_col else "Entity")
 
         # Step 3 — parse the instruction for requested analyses.
         instr = (instruction or "").lower()
         want_executive = any(k in instr for k in ["executive", "dashboard", "kpi", "summary", "national"])
-        want_region = any(k in instr for k in ["region", "geopolitical", "zone"])
-        want_state = "state" in instr
+        want_fso_rank = any(k in instr for k in ["fso", "leaderboard", "rank all", "rank", "officer"])
+        want_region = any(k in instr for k in ["region", "geopolitical", "zone", "scorecard"])
+        want_state = any(k in instr for k in ["state", "states"])
         want_cluster = any(k in instr for k in ["cluster head", "cluster"])
-        want_fso_rank = any(k in instr for k in ["fso", "field sales", "officer", "leaderboard", "rank all"])
-        want_daily = any(k in instr for k in ["daily", "trend", "day", "june"])
-        want_underperform = any(k in instr for k in ["underperform", "below target", "below 70", "watchlist", "behind"])
-        want_topperform = any(k in instr for k in ["top perform", "above target", "above 110", "recognition", "overachiev"])
+        want_daily = any(k in instr for k in ["daily", "trend", "day", "june", "week"])
+        want_variance = any(k in instr for k in ["target", "attainment", "variance", "below", "above", "watchlist", "recognition"])
+        want_chart = True  # always add a chart
 
         # Step 4 — build operations.
         operations: list[Operation] = []
@@ -342,60 +371,67 @@ class IntentEngine:
                 cols.append(primary_count)
             return cols
 
-        if entity_cols and primary_value:
-            primary_entity = entity_cols[0]
-
+        if entity_col and primary_value:
+            # Op 1 — FSO Leaderboard: rank by value, grouped with the full hierarchy.
             if want_fso_rank or want_executive:
+                group = [entity_col] + [c for c in (region_col, state_col, cluster_head_col) if c]
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="rank", target_sheet=first_sheet,
-                    target_columns=value_targets(), group_by=[primary_entity],
-                    parameters={"by": primary_value, "order": "desc", "top_n": 50, "include_all": True},
-                    output_sheet="data", output_label=f"FSO Leaderboard — Ranked by {primary_value}"))
+                    target_columns=value_targets(), group_by=group,
+                    parameters={"by": primary_value, "order": "desc", "top_n": 100, "include_all": True},
+                    output_sheet="data", output_label=f"{entity_noun} Leaderboard — Ranked by {clean_label(primary_value)}"))
                 op_num += 1
 
+            # Op 2 — Regional Scorecard.
             if want_region and region_col:
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
                     target_columns=value_targets(), group_by=[region_col], parameters={},
-                    output_sheet="analysis", output_label="Regional Performance Summary"))
+                    output_sheet="analysis", output_label="Regional Performance Scorecard"))
                 op_num += 1
 
+            # Op 3 — State Performance.
             if want_state and state_col:
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
                     target_columns=value_targets(), group_by=[state_col], parameters={},
-                    output_sheet="analysis", output_label="State Performance Summary"))
+                    output_sheet="analysis", output_label="State Performance Table"))
                 op_num += 1
 
-            if want_cluster and cluster_col:
+            # Op 4 — Cluster Head Leaderboard.
+            if want_cluster and cluster_head_col:
+                group = [cluster_head_col] + [c for c in (region_col, state_col) if c]
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="group_sum", target_sheet=first_sheet,
-                    target_columns=value_targets(), group_by=[cluster_col], parameters={},
-                    output_sheet="analysis", output_label="Cluster Head Performance"))
+                    target_columns=value_targets(), group_by=group, parameters={},
+                    output_sheet="analysis", output_label="Cluster Head Leaderboard"))
                 op_num += 1
 
+            # Op 5 — Daily Trend.
             if want_daily and date_col:
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="growth_rate", target_sheet=first_sheet,
                     target_columns=[primary_value], group_by=[date_col], parameters={},
-                    output_sheet="analysis", output_label="Daily Trend — Deposits with Growth Rate"))
+                    output_sheet="analysis", output_label="Daily Deposit Trend June 2025"))
                 op_num += 1
 
-            if (want_underperform or want_topperform) and target_cols:
+            # Op 6 — Attainment vs Target.
+            if want_variance and fso_target:
                 operations.append(Operation(
                     operation_id=f"op_{op_num}", operation_type="variance", target_sheet=first_sheet,
-                    target_columns=[primary_value], group_by=[primary_entity],
-                    parameters={"target_column": target_cols[0], "include_all": True},
-                    output_sheet="analysis", output_label="Attainment vs Target — All FSOs"))
+                    target_columns=[primary_value], group_by=[entity_col],
+                    parameters={"target_column": fso_target, "include_all": True},
+                    output_sheet="analysis", output_label=f"{entity_noun} Attainment vs Target"))
                 op_num += 1
 
-            # Always visualise the primary ranking.
-            operations.append(Operation(
-                operation_id=f"op_{op_num}", operation_type="chart", target_sheet=first_sheet,
-                target_columns=[primary_value], group_by=[primary_entity],
-                parameters={"chart_type": "bar", "top_n": 10, "x": primary_entity, "y": primary_value},
-                output_sheet="charts", output_label=f"Top 10 by {primary_value}"))
-            op_num += 1
+            # Op 7 — Chart of the top performers.
+            if want_chart:
+                operations.append(Operation(
+                    operation_id=f"op_{op_num}", operation_type="chart", target_sheet=first_sheet,
+                    target_columns=[primary_value], group_by=[entity_col],
+                    parameters={"chart_type": "bar", "top_n": 10, "x": entity_col, "y": primary_value},
+                    output_sheet="charts", output_label=f"Top 10 {entity_noun}s by {clean_label(primary_value)}"))
+                op_num += 1
 
         # Step 5 — safe default when nothing was detected.
         if not operations:

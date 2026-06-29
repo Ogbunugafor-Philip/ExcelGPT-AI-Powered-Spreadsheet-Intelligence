@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, Loader2, Info } from 'lucide-react'
+import { Check, Loader2, Info, X } from 'lucide-react'
 
-// Subtle amber notice shown when the AI planner fell back to rule-based analysis.
-// Honest about what happened without alarming the user.
+// Subtle amber notice shown inline when the AI planner fell back to rule-based
+// analysis. Honest about what happened without alarming the user.
 export function FallbackBanner() {
   return (
     <div
@@ -13,6 +13,31 @@ export function FallbackBanner() {
       <p>
         AI planning timed out — used smart rule-based analysis instead. Results may differ from your exact wording.
       </p>
+    </div>
+  )
+}
+
+// Fixed, full-width amber banner pinned to the very top — sits ABOVE the
+// dashboard and even above the download modal (z-[60] > modal's z-50). Carries
+// a dismiss button and is auto-dismissed by the caller after a few seconds.
+export function FallbackTopBanner({ onDismiss }) {
+  return (
+    <div
+      role="status"
+      className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 px-4 py-3 text-small font-semibold text-navy shadow-card"
+      style={{ background: '#F59E0B' }}
+    >
+      <span className="text-center">
+        ⚡ Smart fallback active — AI timed out. Results generated using rule-based analysis.
+      </span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-navy/70 transition hover:bg-black/10 hover:text-navy"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   )
 }

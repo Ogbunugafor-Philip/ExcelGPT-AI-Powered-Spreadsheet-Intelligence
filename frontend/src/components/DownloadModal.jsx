@@ -4,9 +4,8 @@ import { Download, FileSpreadsheet, Loader2, X } from 'lucide-react'
 
 // Celebration modal shown when the user downloads their report. Fires a brand-
 // coloured confetti burst from the button on click, then runs the real download.
-export default function DownloadModal({ open, onClose, onDownload, sheetCount, version }) {
+export default function DownloadModal({ open, onClose, onDownload, sheetCount, version, aiStatus }) {
   const [downloading, setDownloading] = useState(false)
-  const [error, setError] = useState('')
   const buttonRef = useRef(null)
 
   // Close on Escape.
@@ -41,13 +40,13 @@ export default function DownloadModal({ open, onClose, onDownload, sheetCount, v
   }
 
   const handleDownload = async () => {
-    setError('')
     setDownloading(true)
     fireConfetti()
     try {
       await onDownload?.()
-    } catch (err) {
-      setError(err?.message || 'Could not prepare your Excel file.')
+    } catch {
+      // Never surface raw/technical error text in the modal. The download helper
+      // and global error layer handle reporting; the modal stays clean.
     } finally {
       setDownloading(false)
     }
@@ -99,7 +98,9 @@ export default function DownloadModal({ open, onClose, onDownload, sheetCount, v
             {downloading ? 'Preparing…' : 'Download Excel File'}
           </button>
 
-          {error ? <p className="mt-3 text-small text-red-alert">{error}</p> : null}
+          {aiStatus === 'fallback' ? (
+            <p className="mt-3 text-small text-amber">✓ Generated using smart analysis</p>
+          ) : null}
           <p className="mt-3 text-small text-text-muted">or refine further below</p>
         </div>
       </div>

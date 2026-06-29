@@ -158,12 +158,18 @@ async def analyse(payload: AnalyseRequest) -> AnalyseResponse:
     intelligence_brief = session.get("intelligence_brief", {})
     started = time.perf_counter()
 
+    # The 3-tier planner is designed to ALWAYS return a plan (Tier 3 is rule-based
+    # and never calls the network). We still wrap it so that, no matter what goes
+    # wrong, a raw Python exception message can never reach the client — the
+    # frontend only ever renders friendly copy from errorMessages.js.
     try:
         action_plan, ai_status = intent_engine.classify_with_status(intelligence_brief, payload.instruction)
-    except IntentEngineError as exc:
-        # With the 3-tier fallback this should only fire for an empty instruction.
-        log_error("/analyse", "IntentEngineError", str(exc), payload.session_id)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — never leak raw exception text to the UI
+        log_error("/analyse", type(exc).__name__, str(exc), payload.session_id)
+        raise HTTPException(
+            status_code=500,
+            detail="We couldn't analyse that just now. Please try again.",
+        ) from exc
 
     # Ambiguous instruction: surface the question, do not compute.
     if action_plan.clarification_needed:
