@@ -40,6 +40,7 @@ from schemas.api_schema import (
     MetricPreview,
     PreviewColumn,
     RankingPreview,
+    DownloadAllRequest,
     RefineRequest,
     RefineResponse,
     ReportPreview,
@@ -607,6 +608,42 @@ async def download(token: str) -> FileResponse:
         media_type=config.XLSX_MEDIA_TYPE,
         filename=f"ExcelGPT_Report_{timestamp}.xlsx",
         headers={"Content-Disposition": f'attachment; filename="ExcelGPT_Report_{timestamp}.xlsx"'},
+    )
+
+
+@app.post("/download-all")
+async def download_all(payload: DownloadAllRequest) -> FileResponse:
+    """Package several insight tokens into ONE workbook — a sheet per insight.
+
+    Missing/expired tokens are skipped (never crash); at least one valid token
+    is required, otherwise 404.
+    """
+    items: list[tuple[str, dict]] = []
+    session_id: str | None = None
+    for token in payload.tokens or []:
+        found_session, output_data = session_manager.find_download(token)
+        if output_data is None:
+            log_error("/download-all", "TokenSkipped", f"token not found: {token}", found_session or "")
+            continue
+        session_id = session_id or found_session
+        label = ((output_data.get("executive_summary") or {}).get("title")) or "Insight"
+        items.append((label, output_data))
+
+    if not items or session_id is None:
+        raise HTTPException(status_code=404, detail="No valid insights to download.")
+
+    try:
+        file_path = excel_builder.build_combined(items, session_id)
+    except Exception as exc:  # noqa: BLE001 — surface build failures as 500
+        log_error("/download-all", "ExcelBuildError", str(exc), session_id)
+        raise HTTPException(status_code=500, detail="Failed to build the combined Excel report.") from exc
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return FileResponse(
+        path=file_path,
+        media_type=config.XLSX_MEDIA_TYPE,
+        filename=f"ExcelGPT_Insights_{timestamp}.xlsx",
+        headers={"Content-Disposition": f'attachment; filename="ExcelGPT_Insights_{timestamp}.xlsx"'},
     )
 
 

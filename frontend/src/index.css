@@ -1,6 +1,6 @@
 /* ===========================================================================
-   ExcelGPT — Global stylesheet & design tokens (Phase 8: World-class UX)
-   Navy canvas, electric-blue → emerald accents, Plus Jakarta Sans display type.
+   ExcelGPT — Global stylesheet & design tokens
+   Conversational data decision guide · coral accent on near-black canvas.
    =========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -17,42 +17,46 @@
   --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* Color system */
-  --navy: #0a0f1e;
-  --navy-light: #111827;
-  --navy-card: #1a2235;
-  --blue-electric: #2563eb;
-  --blue-glow: #3b82f6;
-  --emerald: #10b981;
-  --amber: #f59e0b;
-  --red-alert: #ef4444;
-  --gold: #d97706;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --glow-blue: 0 0 20px rgba(37, 99, 235, 0.4);
-  --glow-emerald: 0 0 20px rgba(16, 185, 129, 0.4);
+  /* Surfaces */
+  --bg-primary: #0f0f0f;
+  --bg-card: #1a1a1a;
+  --bg-input: #242424;
+  --bg-hover: #2a2a2a;
 
-  /* Legacy aliases (kept so earlier components keep working) */
-  --color-navy: var(--navy);
-  --color-navy-light: var(--navy-light);
-  --color-blue-electric: var(--blue-electric);
-  --color-blue-glow: var(--blue-glow);
-  --color-emerald: var(--emerald);
-  --color-amber: var(--amber);
-  --color-red-alert: var(--red-alert);
-  --color-gold: var(--gold);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
+  /* Accents */
+  --coral: #ff6b6b;
+  --coral-dark: #e8545a;
+  --coral-light: #ff8e8e;
+  --teal: #4ecdc4;
+  --amber: #ffb347;
+  --red-alert: #ff4757;
+  --gold: #ffd700;
+
+  /* Text */
+  --text-primary: #f7f7f7;
+  --text-secondary: #a0a0a0;
+  --text-muted: #606060;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --glow-coral: 0 0 20px rgba(255, 107, 107, 0.3);
+  --glow-teal: 0 0 20px rgba(78, 205, 196, 0.3);
+
+  /* Legacy aliases so older components keep working on the new palette */
+  --navy: var(--bg-primary);
+  --navy-light: var(--bg-card);
+  --navy-card: var(--bg-card);
+  --blue-electric: var(--coral);
+  --blue-glow: var(--coral-light);
+  --emerald: var(--teal);
+  --border-subtle: var(--border);
   --font-sans: var(--font-body);
 
   /* Radius & elevation */
   --radius-md: 0.5rem;
   --radius-lg: 0.875rem;
   --radius-xl: 1.25rem;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
-  --shadow-glow: 0 0 0 1px rgba(59, 130, 246, 0.4), 0 8px 24px rgba(37, 99, 235, 0.25);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-glow: var(--glow-coral);
 }
 
 /* ---------------------------------------------------------------------------
@@ -77,110 +81,76 @@ html {
 
   body {
     margin: 0;
-    background-color: var(--navy);
+    background-color: var(--bg-primary);
     color: var(--text-primary);
     font-family: var(--font-body);
     font-size: 1rem;
     line-height: 1.5;
   }
 
-  h1, h2, h3 {
+  h1, h2, h3, h4 {
     font-family: var(--font-display);
-    line-height: 1.2;
-    font-weight: 700;
-    color: var(--text-primary);
-  }
-
-  h4 {
     line-height: 1.2;
     font-weight: 700;
     color: var(--text-primary);
   }
 
   ::selection {
-    background: var(--blue-electric);
-    color: var(--text-primary);
+    background: var(--coral);
+    color: #0f0f0f;
   }
 }
 
-/* Custom scrollbar — thin, navy track, blue thumb. */
+/* Custom scrollbar — thin, dark track, coral thumb. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--blue-electric) var(--navy-light);
+  scrollbar-color: var(--coral) var(--bg-card);
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-track {
-  background: var(--navy-light);
+  background: var(--bg-card);
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--blue-electric);
+  background: var(--coral-dark);
   border-radius: 9999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--blue-glow);
+  background: var(--coral);
 }
 
 /* ---------------------------------------------------------------------------
    Typography scale
    --------------------------------------------------------------------------- */
 @layer components {
-  .text-display {
-    font-family: var(--font-display);
-    font-size: 3rem;          /* 48px */
-    font-weight: 800;
-    line-height: 1.1;
-  }
-  .text-heading {
-    font-family: var(--font-display);
-    font-size: 2rem;          /* 32px */
-    font-weight: 700;
-  }
-  .text-subheading {
-    font-family: var(--font-display);
-    font-size: 1.25rem;       /* 20px */
-    font-weight: 600;
-  }
-  .text-body {
-    font-family: var(--font-body);
-    font-size: 1rem;
-    font-weight: 400;
-  }
-  .text-small {
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    font-weight: 400;
-  }
-  .text-micro {
-    font-family: var(--font-body);
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.05em;
-  }
+  .text-display { font-family: var(--font-display); font-size: 3rem; font-weight: 800; line-height: 1.1; }
+  .text-heading { font-family: var(--font-display); font-size: 2rem; font-weight: 700; }
+  .text-subheading { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; }
+  .text-body { font-family: var(--font-body); font-size: 1rem; font-weight: 400; }
+  .text-small { font-family: var(--font-body); font-size: 0.875rem; font-weight: 400; }
+  .text-micro { font-family: var(--font-body); font-size: 0.75rem; font-weight: 500; letter-spacing: 0.05em; }
 
-  /* Reusable surfaces & buttons (kept from earlier phases) */
+  /* Reusable surfaces & buttons */
   .eg-card {
-    background-color: var(--navy-light);
-    border: 1px solid var(--border-subtle);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
   }
   .eg-btn-primary {
-    background-color: var(--blue-electric);
-    color: var(--text-primary);
+    background-color: var(--coral);
+    color: #fff;
     border-radius: var(--radius-md);
     font-weight: 600;
     transition: box-shadow 150ms ease, background-color 150ms ease;
   }
   .eg-btn-primary:hover {
-    background-color: var(--blue-glow);
-    box-shadow: var(--shadow-glow);
+    background-color: var(--coral-dark);
+    box-shadow: var(--glow-coral);
   }
-  .eg-text-muted {
-    color: var(--text-secondary);
-  }
+  .eg-text-muted { color: var(--text-secondary); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -194,13 +164,16 @@ html {
     background: rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
   }
-  .glow-blue { box-shadow: var(--glow-blue); }
-  .glow-emerald { box-shadow: var(--glow-emerald); }
+  .glow-coral { box-shadow: var(--glow-coral); }
+  .glow-teal { box-shadow: var(--glow-teal); }
+  /* legacy aliases */
+  .glow-blue { box-shadow: var(--glow-coral); }
+  .glow-emerald { box-shadow: var(--glow-teal); }
 
   .gradient-text {
-    background: linear-gradient(135deg, #2563eb, #10b981);
+    background: linear-gradient(135deg, var(--coral), var(--teal));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -209,72 +182,43 @@ html {
 }
 
 /* ---------------------------------------------------------------------------
-   Keyframe animations (Phase 8 polish)
+   Keyframe animations
    --------------------------------------------------------------------------- */
-@keyframes eg-spin {
-  to { transform: rotate(360deg); }
+@keyframes eg-spin { to { transform: rotate(360deg); } }
+@keyframes eg-slide-up { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes eg-slide-down { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes eg-card-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes eg-check-in { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
+
+/* Coral pulsing border for the upload drag-over state. */
+@keyframes eg-coral-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.45); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
 }
-@keyframes eg-accept-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.03); }
-  100% { transform: scale(1); }
-}
-@keyframes eg-check-in {
-  0% { transform: scale(0); opacity: 0; }
-  60% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(1); }
-}
-@keyframes eg-slide-up {
-  from { transform: translateY(12px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-@keyframes eg-slide-down {
-  from { transform: translateY(-12px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-@keyframes eg-progress-stripe {
-  from { background-position: 0 0; }
-  to { background-position: 40px 0; }
-}
-@keyframes eg-pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); }
-  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
+/* Staggered bounce for the thinking-indicator dots. */
+@keyframes eg-dot-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+  40% { transform: translateY(-6px); opacity: 1; }
 }
 
-@keyframes eg-card-rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.eg-anim-accept { animation: eg-accept-pulse 300ms ease; }
-.eg-anim-check { animation: eg-check-in 400ms cubic-bezier(0.34, 1.56, 0.64, 1); }
 .eg-anim-slide-up { animation: eg-slide-up 300ms ease both; }
 .eg-anim-slide-down { animation: eg-slide-down 300ms ease both; }
-.eg-anim-pulse-glow { animation: eg-pulse-glow 1.6s ease-in-out infinite; }
-/* Staggered entrance for KPI / dashboard cards (paired with a JS count-up). */
-.eg-anim-rise { animation: eg-card-rise 500ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.eg-anim-rise { animation: eg-card-rise 450ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.eg-anim-check { animation: eg-check-in 400ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.eg-anim-coral-pulse { animation: eg-coral-pulse 1.4s ease-in-out infinite; }
 
-/* Rotating conic-gradient border used by the upload drag-over state. */
-.eg-rotating-border {
-  position: relative;
+.eg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--coral);
+  animation: eg-dot-bounce 1.2s infinite ease-in-out both;
 }
-.eg-rotating-border::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  padding: 2px;
-  background: conic-gradient(from 0deg, #2563eb, #10b981, #f59e0b, #2563eb);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: eg-spin 2s linear infinite;
-  pointer-events: none;
-}
+.eg-dot:nth-child(1) { animation-delay: -0.24s; }
+.eg-dot:nth-child(2) { animation-delay: -0.12s; }
+.eg-dot:nth-child(3) { animation-delay: 0s; }
 
-/* Animated gradient fill for progress bars. */
+/* Animated coral progress fill for the upload bar. */
 .eg-progress-fill {
-  background: linear-gradient(90deg, var(--blue-electric), var(--emerald));
-  background-size: 200% 100%;
-  animation: eg-progress-stripe 1s linear infinite;
+  background: linear-gradient(90deg, var(--coral), var(--coral-light));
 }

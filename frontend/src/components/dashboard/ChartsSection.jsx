@@ -17,16 +17,16 @@ import {
 } from 'recharts'
 import InsightCard from './InsightCard'
 
-const BLUE_ELECTRIC = '#2563EB'
-const EMERALD = '#10B981'
-const GOLD = '#D97706'
-const AMBER = '#F59E0B'
-const RED_ALERT = '#EF4444'
-const GREY = '#9CA3AF'
-const PIE_COLORS = [BLUE_ELECTRIC, EMERALD, GOLD, AMBER, RED_ALERT, '#3B82F6', '#6B7280']
+const CORAL = '#FF6B6B'
+const TEAL = '#4ECDC4'
+const GOLD = '#FFD700'
+const AMBER = '#FFB347'
+const RED_ALERT = '#FF4757'
+const GREY = '#A0A0A0'
+const PIE_COLORS = [CORAL, TEAL, GOLD, AMBER, RED_ALERT, '#FF8E8E', '#606060']
 
-const AXIS_PROPS = { tick: { fill: '#F9FAFB', fontSize: 11 }, stroke: GREY }
-const GRID_PROPS = { stroke: '#374151', strokeDasharray: '3 3' }
+const AXIS_PROPS = { tick: { fill: '#F7F7F7', fontSize: 11 }, stroke: GREY }
+const GRID_PROPS = { stroke: '#2A2A2A', strokeDasharray: '3 3' }
 
 const compact = (value) =>
   typeof value === 'number' ? value.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 }) : value
@@ -42,7 +42,7 @@ const barColors = (data) => {
   const values = data.map((d) => (typeof d.value === 'number' ? d.value : -Infinity))
   const maxIdx = values.indexOf(Math.max(...values))
   const minIdx = values.indexOf(Math.min(...values))
-  return data.map((_, i) => (i === maxIdx ? GOLD : i === minIdx && minIdx !== maxIdx ? RED_ALERT : BLUE_ELECTRIC))
+  return data.map((_, i) => (i === maxIdx ? GOLD : i === minIdx && minIdx !== maxIdx ? RED_ALERT : CORAL))
 }
 
 function DashTooltip({ active, payload }) {
@@ -97,8 +97,8 @@ function ChartBody({ chart, type }) {
           <XAxis dataKey="name" {...AXIS_PROPS} />
           <YAxis tickFormatter={compact} {...AXIS_PROPS} />
           <Tooltip content={<DashTooltip />} />
-          <Area type="monotone" dataKey="value" stroke="none" fill={BLUE_ELECTRIC} fillOpacity={0.18} />
-          <Line type="monotone" dataKey="value" name={metric} stroke={BLUE_ELECTRIC} strokeWidth={2.5} dot={{ fill: '#3B82F6', r: 3 }} />
+          <Area type="monotone" dataKey="value" stroke="none" fill={CORAL} fillOpacity={0.18} />
+          <Line type="monotone" dataKey="value" name={metric} stroke={CORAL} strokeWidth={2.5} dot={{ fill: '#FF8E8E', r: 3 }} />
         </ComposedChart>
       </ResponsiveContainer>
     )

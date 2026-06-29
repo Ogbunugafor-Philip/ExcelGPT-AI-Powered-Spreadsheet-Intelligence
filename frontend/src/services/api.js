@@ -89,18 +89,28 @@ export const getStatus = async (sessionId) => {
   return data
 }
 
-// Stream the built .xlsx for a download token and trigger a browser download.
-export const downloadFile = async (token) => {
-  const { data } = await api.get(`/download/${token}`, { responseType: 'blob' })
-
-  const url = URL.createObjectURL(data)
+// Trigger a browser download for an already-fetched blob.
+const triggerBlobDownload = (blob, filename) => {
+  const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = 'ExcelGPT_Report.xlsx'
+  anchor.download = filename
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+}
+
+// Stream the built .xlsx for a single download token and save it.
+export const downloadFile = async (token, filename = 'ExcelGPT_Insight.xlsx') => {
+  const { data } = await api.get(`/download/${token}`, { responseType: 'blob' })
+  triggerBlobDownload(data, filename)
+}
+
+// Package multiple insight tokens into one multi-sheet workbook and save it.
+export const downloadAll = async (tokens, filename = 'ExcelGPT_Insights.xlsx') => {
+  const { data } = await api.post('/download-all', { tokens }, { responseType: 'blob' })
+  triggerBlobDownload(data, filename)
 }
 
 export default api

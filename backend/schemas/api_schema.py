@@ -201,6 +201,15 @@ class RefineRequest(BaseModel):
     current_version: int = 1
 
 
+# ---------------------------------------------------------------------------
+# POST /download-all — package several insight tokens into one workbook
+# ---------------------------------------------------------------------------
+
+
+class DownloadAllRequest(BaseModel):
+    tokens: list[str] = Field(default_factory=list)
+
+
 class RefineResponse(BaseModel):
     action_plan: ActionPlan
     preview: ReportPreview

@@ -58,7 +58,7 @@ function KpiCard({ card, index }) {
   const dir = DIRECTION[card.direction] || DIRECTION.neutral
   return (
     <div
-      className="eg-anim-rise rounded-2xl border border-white/10 bg-navy-card p-5 transition hover:border-blue-glow/50 hover:shadow-glow"
+      className="eg-anim-rise rounded-2xl border border-white/10 border-t-[3px] border-t-coral bg-card p-5 transition hover:border-coral/40 hover:shadow-glow-coral"
       style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
     >
       <p className="truncate text-xs font-semibold uppercase tracking-wider text-text-secondary" title={card.label}>

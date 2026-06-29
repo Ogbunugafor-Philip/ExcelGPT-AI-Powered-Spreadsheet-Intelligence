@@ -11,11 +11,11 @@ import {
   YAxis,
 } from 'recharts'
 
-const BLUE_ELECTRIC = '#2563EB'
-const AMBER = '#F59E0B'
-const GREY = '#9CA3AF'
+const BLUE_ELECTRIC = '#FF6B6B'
+const AMBER = '#FFB347'
+const GREY = '#A0A0A0'
 
-const AXIS_PROPS = { tick: { fill: '#F9FAFB', fontSize: 11 }, stroke: GREY }
+const AXIS_PROPS = { tick: { fill: '#F7F7F7', fontSize: 11 }, stroke: GREY }
 
 // Heuristic: large magnitudes are Naira amounts; prefix the axis/tooltip with ₦.
 const looksCurrency = (values) => values.some((v) => typeof v === 'number' && Math.abs(v) >= 1000)

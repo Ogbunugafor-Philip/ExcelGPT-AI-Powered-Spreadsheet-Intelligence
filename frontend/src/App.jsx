@@ -1,291 +1,88 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
-import { Github, Loader2 } from 'lucide-react'
+import { useState } from 'react'
 import './index.css'
-import UploadZone from './components/UploadZone'
-import DataPreview from './components/DataPreview'
-import InstructionInput from './components/InstructionInput'
-import ProgressIndicator, { FallbackTopBanner } from './components/ProgressIndicator'
-import { downloadFile, refineReport } from './services/api'
+import UploadView from './components/UploadView'
+import ChatView from './components/ChatView'
+import { analyseInstruction, downloadAll, downloadFile } from './services/api'
 
-// Lazy-load the heavier post-analysis surfaces so the initial bundle stays lean.
-const PreviewPanel = lazy(() => import('./components/PreviewPanel'))
-const RefinementInput = lazy(() => import('./components/RefinementInput'))
-const DownloadModal = lazy(() => import('./components/DownloadModal'))
-
-const REPO_URL = 'https://github.com/Ogbunugafor-Philip/ExcelGPT-AI-Powered-Spreadsheet-Intelligence'
-
-// Turn an action plan into a short assistant-style summary for the chat history.
-const OP_LABELS = {
-  rank: 'ranking', group_sum: 'totals', group_avg: 'averages', filter: 'filtering',
-  growth_rate: 'growth rates', variance: 'variance vs target', correlation: 'correlation',
-  outlier: 'outlier detection', distribution: 'distribution', forecast: 'forecast',
-  cluster: 'clustering', score: 'scoring', chart: 'charts',
-}
-
-const summariseActionPlan = (plan) => {
-  if (!plan) return 'Updated the report.'
-  const ops = plan.operations || []
-  const labels = [...new Set(ops.map((op) => OP_LABELS[op.operation_type] || op.operation_type))]
-  const what = labels.length ? labels.join(' + ') : (plan.intent_type || 'report').replace(/_/g, ' ')
-  return `Analysed: ${what} across ${ops.length} operation${ops.length === 1 ? '' : 's'}`
-}
-
-const Spinner = () => (
-  <div className="flex items-center justify-center py-16 text-text-secondary">
-    <Loader2 className="h-6 w-6 animate-spin text-blue-electric" />
-  </div>
-)
-
+// ExcelGPT — conversational data decision guide.
+// Upload an Excel file, then ask questions one at a time; each answer becomes an
+// insight card in the chat. Chat history persists while the same file is loaded.
 export default function App() {
-  const [sessionId, setSessionId] = useState('')
-  const [preview, setPreview] = useState(null)
-  const [intelligenceBrief, setIntelligenceBrief] = useState(null)
-  const [currentView, setCurrentView] = useState('upload')
-  const [reportPreview, setReportPreview] = useState(null)
-  const [downloadToken, setDownloadToken] = useState(null)
-  const [aiStatus, setAiStatus] = useState('cerebras') // 'cerebras' | 'fallback'
-  const [fallbackBannerVisible, setFallbackBannerVisible] = useState(false)
-  const [version, setVersion] = useState(0)
-  const [refinementHistory, setRefinementHistory] = useState([])
-  const [refinementCount, setRefinementCount] = useState(0)
-  const [isRefining, setIsRefining] = useState(false)
-  // Phase 8 — progress + download modal + header shadow.
-  const [analysing, setAnalysing] = useState(false)
-  const [progressStep, setProgressStep] = useState(1)
-  const [downloadModalOpen, setDownloadModalOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
-  const stepTimers = useRef([])
+  const [file, setFile] = useState(null) // { name, rowCount, sheetCount, sessionId, intelligenceBrief }
+  const [chatHistory, setChatHistory] = useState([]) // [{ id, question, answer, downloadToken, error, timestamp }]
+  const [isThinking, setIsThinking] = useState(false)
+  const [inputValue, setInputValue] = useState('')
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
-    window.addEventListener('scroll', onScroll)
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  // Auto-dismiss the fixed fallback banner after 8 seconds.
-  useEffect(() => {
-    if (!fallbackBannerVisible) return undefined
-    const id = setTimeout(() => setFallbackBannerVisible(false), 8000)
-    return () => clearTimeout(id)
-  }, [fallbackBannerVisible])
-
-  // Surface the fixed top banner whenever a result comes back via the fallback.
-  const applyAiStatus = (status) => {
-    const next = status || 'cerebras'
-    setAiStatus(next)
-    if (next === 'fallback') setFallbackBannerVisible(true)
+  const handleFileUpload = (rawFile, response) => {
+    const sheets = response?.preview?.sheets || []
+    const rowCount = sheets.reduce((sum, s) => sum + (s?.row_count || 0), 0)
+    setFile({
+      name: rawFile?.name || response?.intelligence_brief?.filename || 'workbook.xlsx',
+      rowCount,
+      sheetCount: sheets.length,
+      sessionId: response.session_id,
+      intelligenceBrief: response.intelligence_brief,
+    })
+    setChatHistory([])
+    setInputValue('')
   }
 
-  // Drive the simulated step sequence while a single /analyse request is in flight.
-  useEffect(() => {
-    stepTimers.current.forEach(clearTimeout)
-    stepTimers.current = []
-    if (analysing) {
-      stepTimers.current.push(setTimeout(() => setProgressStep(2), 1400))
-      stepTimers.current.push(setTimeout(() => setProgressStep(3), 2800))
-    }
-    return () => stepTimers.current.forEach(clearTimeout)
-  }, [analysing])
+  const handleQuestion = async (question) => {
+    if (!file?.sessionId || isThinking) return
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setChatHistory((prev) => [
+      ...prev,
+      { id, question, answer: null, downloadToken: null, error: null, timestamp: Date.now() },
+    ])
+    setInputValue('')
+    setIsThinking(true)
 
-  const dataStats = useMemo(() => ({
-    rowCount: preview?.sheets?.reduce((sum, s) => sum + (s?.row_count || 0), 0) || 0,
-    sheetCount: preview?.sheets?.length || 0,
-  }), [preview])
-
-  const reportSheetCount = useMemo(() => {
-    if (!reportPreview) return 0
-    let n = 1 // Executive Summary is always written
-    if (reportPreview.sheets?.some((s) => s.sheet_name === 'data' && s.columns?.length)) n += 1
-    if (((reportPreview.metrics?.length || 0) + (reportPreview.rankings?.length || 0) + (reportPreview.growth_table?.length || 0)) > 0) n += 1
-    if (reportPreview.charts?.length) n += 1
-    if (reportPreview.forecast && (reportPreview.forecast.historical?.length || reportPreview.forecast.projected?.length)) n += 1
-    return n
-  }, [reportPreview])
-
-  const handleUploadComplete = (nextSessionId, nextPreview, nextIntelligenceBrief) => {
-    setSessionId(nextSessionId)
-    setPreview(nextPreview)
-    setIntelligenceBrief(nextIntelligenceBrief)
-    setReportPreview(null)
-    setDownloadToken(null)
-    setAiStatus('cerebras')
-    setFallbackBannerVisible(false)
-    setVersion(0)
-    setRefinementHistory([])
-    setRefinementCount(0)
-    setCurrentView('preview')
-  }
-
-  const handleAnalyzeStart = () => {
-    setProgressStep(1)
-    setAiStatus('cerebras')
-    setFallbackBannerVisible(false)
-    setAnalysing(true)
-  }
-
-  // Called when /analyse returns a real (non-clarification) result.
-  const handleAnalyseResult = (data, instruction) => {
-    setProgressStep(4)
-    setTimeout(() => {
-      setReportPreview(data.preview)
-      setDownloadToken(data.download_token)
-      applyAiStatus(data.ai_status)
-      setVersion(data.version)
-      setRefinementHistory([
-        { role: 'user', content: instruction },
-        { role: 'assistant', content: summariseActionPlan(data.action_plan) },
-      ])
-      setRefinementCount(0)
-      setCurrentView('preview')
-      setAnalysing(false)
-    }, 700)
-  }
-
-  // Called in InstructionInput's finally; stop progress if no report was produced.
-  const handleAnalyzeEnd = (success) => {
-    if (!success) setAnalysing(false)
-  }
-
-  const handleRefine = async (feedback) => {
-    const priorHistory = refinementHistory
-    setRefinementHistory((prev) => [...prev, { role: 'user', content: feedback }])
-    setIsRefining(true)
     try {
-      const data = await refineReport({ session_id: sessionId, feedback, history: priorHistory, current_version: version })
-      setReportPreview(data.preview)
-      setDownloadToken(data.download_token)
-      applyAiStatus(data.ai_status)
-      setVersion(data.version)
-      setRefinementHistory((prev) => [...prev, { role: 'assistant', content: summariseActionPlan(data.action_plan) }])
-      setRefinementCount((count) => count + 1)
+      const data = await analyseInstruction(file.sessionId, question)
+      setChatHistory((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, answer: data, downloadToken: data.download_token || null } : item,
+        ),
+      )
     } catch (err) {
-      setRefinementHistory((prev) => [...prev, { role: 'assistant', content: `⚠️ ${err.message || 'Refinement failed.'}` }])
+      const message =
+        err?.errorKey === 'CEREBRAS_TIMEOUT'
+          ? 'That took longer than expected. Please try asking again.'
+          : err?.errorKey === 'SESSION_EXPIRED'
+            ? 'Your session expired — please re-upload your file.'
+            : 'Something went wrong analysing that. Try rephrasing your question.'
+      setChatHistory((prev) => prev.map((item) => (item.id === id ? { ...item, error: message } : item)))
     } finally {
-      setIsRefining(false)
+      setIsThinking(false)
     }
   }
 
-  const handleStartFresh = () => {
-    setReportPreview(null)
-    setDownloadToken(null)
-    setVersion(0)
-    setRefinementHistory([])
-    setRefinementCount(0)
-    setCurrentView('instruction')
+  const handleChangeFile = () => {
+    setFile(null)
+    setChatHistory([])
+    setInputValue('')
+    setIsThinking(false)
   }
 
-  const handleConfirmedDownload = () => downloadFile(downloadToken)
+  const handleDownloadOne = (token) => downloadFile(token)
 
-  const showReport = reportPreview && currentView === 'preview'
+  const handleDownloadAll = (tokens) => downloadAll(tokens)
+
+  if (!file) {
+    return <UploadView onUpload={handleFileUpload} />
+  }
 
   return (
-    <div className="min-h-screen bg-navy text-text-primary">
-      {/* Fixed fallback banner — above the dashboard AND the download modal. */}
-      {fallbackBannerVisible ? (
-        <FallbackTopBanner onDismiss={() => setFallbackBannerVisible(false)} />
-      ) : null}
-
-      {/* Fixed header */}
-      <header
-        className={`fixed inset-x-0 top-0 z-40 h-16 border-b border-border-subtle transition-shadow ${scrolled ? 'shadow-card' : ''}`}
-        style={{ background: 'rgba(10,15,30,0.8)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
-      >
-        <div className="mx-auto flex h-full max-w-[1280px] items-center justify-between px-6 lg:px-12">
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-xl font-extrabold">
-              <span className="text-white">Excel</span>
-              <span className="gradient-text">GPT</span>
-            </span>
-            <span className="hidden text-small text-text-muted sm:inline">AI-Powered Spreadsheet Intelligence</span>
-          </div>
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-1.5 text-small text-text-secondary transition hover:border-white/20 hover:text-text-primary"
-          >
-            <Github className="h-4 w-4" />
-            <span className="hidden sm:inline">Star on GitHub</span>
-          </a>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1280px] px-6 pb-16 pt-16 lg:px-12">
-        {currentView === 'upload' ? (
-          <section className="flex flex-col items-center py-12 text-center sm:py-16">
-            <h1 className="font-display text-[32px] font-extrabold leading-tight sm:text-[48px]">
-              <span className="gradient-text">Transform any spreadsheet into insights</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-body text-text-secondary">
-              Upload your Excel file, describe what you need, and receive a professionally formatted report in seconds.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              {['🇳🇬 Built for Nigeria', '⚡ Powered by Cerebras', '📊 World-class Excel output'].map((pill) => (
-                <span key={pill} className="glass rounded-full px-4 py-2 text-small text-text-secondary">{pill}</span>
-              ))}
-            </div>
-            <div className="mt-10 w-full">
-              <UploadZone onUploadComplete={handleUploadComplete} />
-            </div>
-          </section>
-        ) : null}
-
-        {currentView !== 'upload' ? (
-          <div className="flex flex-col gap-8 py-8">
-            {showReport ? (
-              <Suspense fallback={<Spinner />}>
-                <PreviewPanel
-                  preview={reportPreview}
-                  downloadToken={downloadToken}
-                  version={version}
-                  onDownload={() => setDownloadModalOpen(true)}
-                />
-                <RefinementInput
-                  history={refinementHistory}
-                  version={version}
-                  refinementCount={refinementCount}
-                  isRefining={isRefining}
-                  onRefine={handleRefine}
-                  onStartFresh={handleStartFresh}
-                />
-              </Suspense>
-            ) : (
-              <>
-                {analysing ? (
-                  <ProgressIndicator currentStep={progressStep} rowCount={dataStats.rowCount} sheetCount={dataStats.sheetCount} aiStatus={aiStatus} />
-                ) : null}
-                <div className={analysing ? 'hidden' : 'flex flex-col gap-8'}>
-                  <DataPreview preview={preview} intelligenceBrief={intelligenceBrief} />
-                  <InstructionInput
-                    sessionId={sessionId}
-                    intelligenceBrief={intelligenceBrief}
-                    onAnalyzeStart={handleAnalyzeStart}
-                    onAnalyse={handleAnalyseResult}
-                    onAnalyzeEnd={handleAnalyzeEnd}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        ) : null}
-      </main>
-
-      <footer className="border-t border-border-subtle px-6 py-6 text-center text-small text-text-secondary lg:px-12">
-        <p>© ExcelGPT • AI-Powered Spreadsheet Intelligence</p>
-      </footer>
-
-      {downloadModalOpen ? (
-        <Suspense fallback={null}>
-          <DownloadModal
-            open={downloadModalOpen}
-            onClose={() => setDownloadModalOpen(false)}
-            onDownload={handleConfirmedDownload}
-            sheetCount={reportSheetCount}
-            version={version}
-            aiStatus={aiStatus}
-          />
-        </Suspense>
-      ) : null}
-    </div>
+    <ChatView
+      file={file}
+      chatHistory={chatHistory}
+      isThinking={isThinking}
+      inputValue={inputValue}
+      onInputChange={setInputValue}
+      onSubmit={handleQuestion}
+      onChangeFile={handleChangeFile}
+      onDownloadOne={handleDownloadOne}
+      onDownloadAll={handleDownloadAll}
+    />
   )
 }
